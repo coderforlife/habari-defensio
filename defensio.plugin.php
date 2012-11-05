@@ -178,7 +178,7 @@ class Defensio extends Plugin
 	{
 		$this->defensio = new DefensioAPI( Options::get( self::OPTION_API_KEY ), Site::get_url( 'habari' ) );
 		$this->load_text_domain( 'defensio' );
-		$this->add_template( 'dasboard.block.defensio', __DIR__ . '/dasboard.block.defensio.php' );
+		$this->add_template( 'dashboard.block.defensio', __DIR__ . '/dashboard.block.defensio.php' );
 	}
 	
 	/**
