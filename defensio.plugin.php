@@ -53,24 +53,28 @@ class Defensio extends Plugin
 	/**
 	 * Setup defaults on activation. Don't overwrite API key if it's already there.
 	 */
-	public function action_plugin_activation()
+	public function action_plugin_activation( $file )
 	{
-		Modules::add( 'Defensio' );
-		Session::notice( _t('Please set your Defensio API Key in the configuration.', 'defensio') );
-		if ( !Options::get(self::OPTION_API_KEY) ) {
-			Options::set( self::OPTION_API_KEY, '' );
+		if( Plugins::id_from_file($file) == Plugins::id_from_file(__FILE__) ) {
+			Modules::add( 'Defensio' );
+			Session::notice( _t('Please set your Defensio API Key in the configuration.', 'defensio') );
+			if ( !Options::get(self::OPTION_API_KEY) ) {
+				Options::set( self::OPTION_API_KEY, '' );
+			}
+			Options::set(self::OPTION_FLAG_SPAMINESS, 80); // WordPress default
+			Options::set(self::OPTION_ANNOUNCE_POSTS, 'yes');
+			Options::set(self::OPTION_AUTO_APPROVE, 'no');
 		}
-		Options::set(self::OPTION_FLAG_SPAMINESS, 0);
-		Options::set(self::OPTION_ANNOUNCE_POSTS, 'yes');
-		Options::set(self::OPTION_AUTO_APPROVE, 'no');
 	}
 
 	/**
 	 * Remove the dashboard module on deactivation.
 	 */
-	public function action_plugin_deactivation()
+	public function action_plugin_deactivation( $file )
 	{
-		Modules::remove_by_name( 'Defensio' );
+		if( Plugins::id_from_file($file) == Plugins::id_from_file(__FILE__) ) {
+			Modules::remove_by_name( 'Defensio' );
+		}
 	}
 
 	/**
