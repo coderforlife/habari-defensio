@@ -33,7 +33,7 @@ class Defensio extends Plugin
 		static $loaded = FALSE;
 		
 		if ( !$loaded && in_array( strtolower($class), $classes ) !== FALSE ) {
-			require "defensioapi.php";
+			require_once "defensioapi.php";
 			$loaded = true;
 		}
 	}
@@ -53,28 +53,15 @@ class Defensio extends Plugin
 	/**
 	 * Setup defaults on activation. Don't overwrite API key if it's already there.
 	 */
-	public function action_plugin_activation( $file )
+	public function action_plugin_activation()
 	{
-		if( Plugins::id_from_file($file) == Plugins::id_from_file(__FILE__) ) {
-			Modules::add( 'Defensio' );
-			Session::notice( _t('Please set your Defensio API Key in the configuration.', 'defensio') );
-			if ( !Options::get(self::OPTION_API_KEY) ) {
-				Options::set( self::OPTION_API_KEY, '' );
-			}
-			Options::set(self::OPTION_FLAG_SPAMINESS, 80); // WordPress default
-			Options::set(self::OPTION_ANNOUNCE_POSTS, 'yes');
-			Options::set(self::OPTION_AUTO_APPROVE, 'no');
+		Session::notice( _t('Please set your Defensio API Key in the configuration.', 'defensio') );
+		if ( !Options::get(self::OPTION_API_KEY) ) {
+			Options::set( self::OPTION_API_KEY, '' );
 		}
-	}
-
-	/**
-	 * Remove the dashboard module on deactivation.
-	 */
-	public function action_plugin_deactivation( $file )
-	{
-		if( Plugins::id_from_file($file) == Plugins::id_from_file(__FILE__) ) {
-			Modules::remove_by_name( 'Defensio' );
-		}
+		Options::set(self::OPTION_FLAG_SPAMINESS, 80); // WordPress default
+		Options::set(self::OPTION_ANNOUNCE_POSTS, 'yes');
+		Options::set(self::OPTION_AUTO_APPROVE, 'no');
 	}
 
 	/**
@@ -174,47 +161,53 @@ class Defensio extends Plugin
 	{
 		$this->defensio = new DefensioAPI( Options::get( self::OPTION_API_KEY ), Site::get_url( 'habari' ) );
 		$this->load_text_domain( 'defensio' );
+		$this->add_template( 'dasboard.block.defensio', __DIR__ . '/dasboard.block.defensio.php' );
+	}
+	
+	/**
+	 * Add the blocks this plugin provides to the list of available blocks
+	 * @param array $block_list An array of block names, indexed by unique string identifiers
+	 * @return array The altered array
+	 */
+    public function filter_block_list( $block_list )
+	{
+		if (User::identify()->can('manage_all_comments')) {
+			$block_list['defensio'] = _t( 'Defensio', 'defensio' );
+		}
+		return $block_list;
+	}
+    
+   	/**
+	 * Return a list of blocks that can be used for the dashboard
+	 * @param array $block_list An array of block names, indexed by unique string identifiers
+	 * @return array The altered array
+	 */
+	public function filter_dashboard_block_list( $block_list )
+	{
+		$block_list['defensio'] = _t( 'Defensio', 'defensio' );
+		return $block_list;
 	}
 
 	/**
-	 * Add the dashboard module to the list
-	 * @param array $modules The dashboard modules available
-	 * @return array Modified list of dashboard modules with ours added
+	 * Produce the content for the Defensio block
+	 * @param Block $block The block object
+	 * @param Theme $theme The theme that the block will be output with
 	 */
-	public function filter_dash_modules( $modules )
-	{
-		$modules[] = 'Defensio';
-		$this->add_template( 'dash_defensio', dirname( __FILE__ ) . '/dash_defensio.php' );
-		return $modules;
-	}
+	public function action_block_content_defensio( $block, Theme $theme )
+    {
+		$block->link = URL::get('admin', array('page' => 'comments'));
 
-	/**
-	 * Filter our dashboard module to add our output.
-	 * @param array $module An array contain module data like title, content, etc
-	 * @param int $module_id The modules id
-	 * @param Theme $theme The theme object
-	 * @return array Our module containing title, content, etc.
-	 */
-	public function filter_dash_module_defensio( $module, $module_id, Theme $theme )
-	{
 		$stats = $this->theme_defensio_stats();
 		// Show an error in the dashboard if Defensio returns a bad response.
-		if ( !$stats ) {
-			$module['title'] = '<a href="' . URL::get( 'admin', 'page=comments' ) . '">' . _t('Defensio', 'defensio') . '</a>';
-			$module['content'] = '<ul class=items"><li class="item clear">' . _t('Bad Response From Server', 'defensio') . '</li></ul>';
-			return $module;
-		}
+		if ( !$stats ) { $block->bad_response = true; return; }
 
-		$theme->accuracy = sprintf( '%.2f', $stats->accuracy * 100 );
-		$theme->spam = $stats->spam;
-		$theme->ham = $stats->ham;
-		$theme->false_negatives = $stats->false_negatives;
-		$theme->false_positives = $stats->false_positives;
-
-		$module['title'] = '<a href="' . htmlspecialchars( URL::get( 'admin', array( 'page' => 'comments', 'status' => Comment::STATUS_SPAM ) ), ENT_COMPAT, 'UTF-8' ) . '">'. _t('Defensio', 'defensio') . '</a>';
-		$module['content'] = $theme->fetch( 'dash_defensio' );
-		return $module;
-	}
+		$block->bad_response = false;
+		$block->accuracy = sprintf( '%.2f', $stats->accuracy * 100 );
+		$block->spam = $stats->spam;
+		$block->ham = $stats->ham;
+		$block->false_negatives = $stats->false_negatives;
+		$block->false_positives = $stats->false_positives;
+    }
 	
 	/**
 	 * Get the Defensio stats.
