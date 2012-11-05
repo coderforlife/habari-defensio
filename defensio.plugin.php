@@ -18,6 +18,7 @@ class Defensio extends Plugin
 
 	const OPTION_API_KEY = 'defensio__api_key';
 	const OPTION_FLAG_SPAMINESS = 'defensio__spaminess_flag';
+	const OPTION_DELETE_SPAMINESS = 'defensio__spaminess_delete';
 	const OPTION_ANNOUNCE_POSTS = 'defensio__announce_posts';
 	const OPTION_AUTO_APPROVE = 'defensio__auto_approve';
 
@@ -60,6 +61,7 @@ class Defensio extends Plugin
 			Options::set( self::OPTION_API_KEY, '' );
 		}
 		Options::set(self::OPTION_FLAG_SPAMINESS, 80); // WordPress default
+		Options::set(self::OPTION_DELETE_SPAMINESS, 99);
 		Options::set(self::OPTION_ANNOUNCE_POSTS, 'yes');
 		Options::set(self::OPTION_AUTO_APPROVE, 'no');
 	}
@@ -70,6 +72,10 @@ class Defensio extends Plugin
 	 */
 	public function configure()
 	{
+		$spaminess_keys = $spaminess_values = range(0, 95, 5);
+		foreach ($spaminess_keys as &$x) { $x .= '%'; }
+		$spaminess_opts = array_combine(array_merge($spaminess_keys, array('99%', 'Never')), array_merge($spaminess_values, array(99, 100)));
+		
 		$ui = new FormUI( 'defensio' );
 
 		// Add a text control for the address you want the email sent to
@@ -82,15 +88,26 @@ class Defensio extends Plugin
 		$api_key->add_validator( 'validate_required' );
 		$api_key->add_validator( array( $this, 'validate_api_key' ) );
 
-		// min spamines flag
-		$spaminess = $ui->append(
+		// min spaminess flag
+		$spaminess_flag = $ui->append(
 				'select',
-				'min_spaminess',
+				'min_spaminess_flag',
 				'option:' . self::OPTION_FLAG_SPAMINESS,
-				_t('Minimum Spaminess to Flag as Spam (%): ', 'defensio')
+				_t('Minimum Spaminess to Flag as Spam: ', 'defensio')
 			);
-		$spaminess->options = array_combine( range(0, 100, 5), range(0, 100, 5) );
-		$spaminess->add_validator( 'validate_required' );
+		$spaminess_flag->options = $spaminess_opts;
+		$spaminess_flag->add_validator( 'validate_required' );
+
+		// min spaminess for automatic deletion
+		$spaminess_delete = $ui->append(
+				'select',
+				'min_spaminess_delete',
+				'option:' . self::OPTION_DELETE_SPAMINESS,
+				_t('Minimum Spaminess to Automatically Delete: ', 'defensio')
+			);
+		$spaminess_delete->options = $spaminess_opts;
+		$spaminess_delete->add_validator( 'validate_required' );
+
 
 		// using yes/no is not ideal but it's what we got :(
 		$announce_posts = $ui->append(
@@ -169,14 +186,14 @@ class Defensio extends Plugin
 	 * @param array $block_list An array of block names, indexed by unique string identifiers
 	 * @return array The altered array
 	 */
-    public function filter_block_list( $block_list )
+	public function filter_block_list( $block_list )
 	{
 		if (User::identify()->can('manage_all_comments')) {
 			$block_list['defensio'] = _t( 'Defensio', 'defensio' );
 		}
 		return $block_list;
 	}
-    
+	
    	/**
 	 * Return a list of blocks that can be used for the dashboard
 	 * @param array $block_list An array of block names, indexed by unique string identifiers
@@ -194,7 +211,7 @@ class Defensio extends Plugin
 	 * @param Theme $theme The theme that the block will be output with
 	 */
 	public function action_block_content_defensio( $block, Theme $theme )
-    {
+	{
 		$block->link = URL::get('admin', array('page' => 'comments'));
 
 		$stats = $this->theme_defensio_stats();
@@ -207,7 +224,7 @@ class Defensio extends Plugin
 		$block->ham = $stats->ham;
 		$block->false_negatives = $stats->false_negatives;
 		$block->false_positives = $stats->false_positives;
-    }
+	}
 	
 	/**
 	 * Get the Defensio stats.
@@ -234,10 +251,10 @@ class Defensio extends Plugin
 	}
 
 	/**
-	 * Scan a comment with defensio and set it's status.
+	 * Scan a comment with Defensio and dissallow it if above threshold.
 	 * @param Comment $comment The comment object to scan
 	 */
-	private function audit_comment( Comment $comment )
+	public function filter_comment_insert_allow( $allow, $comment )
 	{
 		$user = User::identify();
 		$params = array(
@@ -265,9 +282,29 @@ class Defensio extends Plugin
 		}
 
 		$result = $this->defensio->audit_comment( $params );
-		// see if it's spamm or the spaminess is greater than min allowed spaminess
-		$min_spaminess = Options::get( self::OPTION_FLAG_SPAMINESS );
-		if ( $result->spam == true && $result->spaminess >= ((int) $min_spaminess / 100) ) {
+		$comment->info->defensio_signature = $result->signature;
+		$comment->info->defensio_spaminess = $result->spaminess;
+		$comment->info->defensio_is_spam = $result->spam;
+
+		// don't auto-delete logged-in users
+		if ( User::identify()->loggedin ) { return $allow; }
+		
+		// see if it's spam or the spaminess is greater than min allowed spaminess
+		$min_spaminess_delete = Options::get( self::OPTION_DELETE_SPAMINESS );
+		if ( $result->spam == true && $result->spaminess >= ((int) $min_spaminess_delete / 100) ) { return false; }
+
+		return $allow;
+	}
+
+	/**
+	 * Use the already computed Defensio data to determine if a comment is spam, unapproved, or approved.
+	 * @param Comment $comment The comment object to scan
+	 */
+	private function audit_comment( Comment $comment )
+	{
+		// see if it's spam or the spaminess is greater than min allowed spaminess
+		$min_spaminess_flag = Options::get( self::OPTION_FLAG_SPAMINESS );
+		if ( $comment->info->defensio_is_spam == true && $comment->info->defensio_spaminess >= ((int) $min_spaminess_flag / 100) ) {
 			$comment->status = 'spam';
 			// this array nonsense is dumb
 			$comment->info->spamcheck = array_unique(
@@ -286,8 +323,6 @@ class Defensio extends Plugin
 				$comment->status = 'unapproved';
 			}
 		}
-		$comment->info->defensio_signature = $result->signature;
-		$comment->info->defensio_spaminess = $result->spaminess;
 	}
 
 	/**
