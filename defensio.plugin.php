@@ -140,7 +140,7 @@ class Defensio extends Plugin
 	public function validate_api_key( $key )
 	{
 		$host = trim_hostname( Site::get_url( 'hostname' ) );
-		$defensio = new Defensio( $key, self::DEFENSIO_CLIENT_ID );
+		$defensio = new DefensioAPI( $key, self::DEFENSIO_CLIENT_ID );
 		list( $errcode, $xml ) = $defensio->getUser();
 		if ( $errcode == 200 && $xml->status == 'success' ) {
 			return trim_hostname( $xml->{'owner-url'} ) == $host ? array() :
@@ -155,7 +155,7 @@ class Defensio extends Plugin
 	 */
 	public function action_init()
 	{
-		$this->defensio = new Defensio( Options::get( self::OPTION_API_KEY ), self::DEFENSIO_CLIENT_ID );
+		$this->defensio = new DefensioAPI( Options::get( self::OPTION_API_KEY ), self::DEFENSIO_CLIENT_ID );
 		$this->load_text_domain( 'defensio' );
 		$this->add_template( 'dashboard.block.defensio', __DIR__ . '/dashboard.block.defensio.php' );
 	}
@@ -307,6 +307,7 @@ class Defensio extends Plugin
 	
 	/**
 	 * @todo cache results (at least for this iteration)
+	 * @todo use defensio_profanity_match
 	 */
 	public function filter_comment_content_out($content, $comment)
 	{

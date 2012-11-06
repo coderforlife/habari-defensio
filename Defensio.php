@@ -13,7 +13,7 @@
 require_once( dirname( __FILE__ ) . '/lib/exceptions.php' );
 require_once( dirname( __FILE__ ) . '/lib/DefensioRestClient.php' );
 
-class Defensio
+class DefensioAPI
 {
 
     // Misc
