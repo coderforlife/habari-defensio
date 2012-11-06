@@ -198,14 +198,14 @@ class Defensio extends Plugin
 		if ( is_string($stats) ) { $block->error_msg = $stats; return; }
 
 		$block->error_msg = null;
-		$block->accuracy = sprintf( '%.2f', $stats->accuracy * 100 );
-		$block->spam = $stats->unwanted->spam;
-		$block->malicious = $stats->unwanted->malicious;
-		$block->legitimate = $stats->legitimate->total;
-		$block->false_negatives = $stats->{'false-negatives'};
-		$block->false_positives = $stats->{'false-positives'};
-		$block->learning = $stats->learning;
-		$block->learning_status = $stats->{'learning-status'};
+		$block->accuracy = sprintf( '%.2f', (string)$stats->accuracy * 100 );
+		$block->spam = (string)$stats->unwanted->spam;
+		$block->malicious = (string)$stats->unwanted->malicious;
+		$block->legitimate = (string)$stats->legitimate->total;
+		$block->false_negatives = (string)$stats->{'false-negatives'};
+		$block->false_positives = (string)$stats->{'false-positives'};
+		$block->learning = (string)$stats->learning;
+		$block->learning_status = (string)$stats->{'learning-status'};
 	}
 	
 	/**
@@ -219,7 +219,7 @@ class Defensio extends Plugin
 		}
 		else {
 			list( $errcode, $stats ) = $this->defensio->getBasicStats();
-			if ( $errcode != 200 || $stats->status != 'success' ) {
+			if ( $errcode != 200 || (string)$stats->status != 'success' ) {
 				$msg = "Defensio error while getting stats: $errcode $stats->message";
 				EventLog::log( $msg, 'warning', 'plugin', 'Defensio' );
 				return $msg;
@@ -252,7 +252,7 @@ class Defensio extends Plugin
 		$to = date( 'Y-m-d', $to );
 		
 		list( $errcode, $stats ) = $this->defensio->getExtendedStats(array( 'from' => $from, 'to' => $to ));
-		if ( $errcode != 200 || $stats->status != 'success' ) {
+		if ( $errcode != 200 || (string)$stats->status != 'success' ) {
 			$msg = "Defensio error while getting extended stats: $errcode $stats->message";
 			EventLog::log( $msg, 'warning', 'plugin', 'Defensio' );
 			return $msg;
@@ -291,17 +291,17 @@ class Defensio extends Plugin
 			}
 		}
 		list( $errcode, $filtered ) = $this->defensio->postProfanityFilter( $in );
-		if ( $errcode != 200 || $filtered->status != 'success' ) {
+		if ( $errcode != 200 || (string)$filtered->status != 'success' ) {
 			$msg = "Defensio error while running profanity filter: $errcode $filtered->message";
 			EventLog::log( $msg, 'warning', 'plugin', 'Defensio' );
 			return $data;
 		}
 		
 		if ( is_string($data) )
-			return $filtered->filtered->text;
+			return (string)$filtered->filtered->text;
 		$out = array();
 		foreach ( $map as $key_xml => $key )
-			$out[$key] = $filtered->filtered->$key_xml;
+			$out[$key] = (string)$filtered->filtered->$key_xml;
 		return $out;
 	}
 	
@@ -388,25 +388,25 @@ class Defensio extends Plugin
 		}
 
 		list( $errcode, $result ) = $this->defensio->postDocument( $params );
-		if ( $errcode != 200 || $stats->status != 'success' ) { // with async 'pending' is a valid option
+		if ( $errcode != 200 || (string)$result->status != 'success' ) { // with async 'pending' is a valid option
 			//$msg = "Defensio error while getting extended stats: $errcode $stats->message";
 			//EventLog::log( $msg, 'warning', 'plugin', 'Defensio' );
 			//return $msg;
 		}
 
-		$comment->info->defensio_signature = $result->signature;
+		$comment->info->defensio_signature = (string)$result->signature;
 		// all empty while 'pending':
-		$comment->info->defensio_allow = $result->allow == 'true';
-		$comment->info->defensio_classification = $result->classification; // innocent, spam, and malicious
-		$comment->info->defensio_spaminess = $result->spaminess * 1.0;
-		$comment->info->defensio_profanity_match = $result->{'profanity-match'} == 'true';
+		$comment->info->defensio_allow = (string)$result->allow == 'true';
+		$comment->info->defensio_classification = (string)$result->classification; // innocent, spam, and malicious
+		$comment->info->defensio_spaminess = (string)$result->spaminess * 1.0;
+		$comment->info->defensio_profanity_match = (string)$result->{'profanity-match'} == 'true';
 
 		// don't auto-delete logged-in users
 		if ( $user->loggedin ) { return $allow; }
 		
 		// see if it's spam or the spaminess is greater than min allowed spaminess
 		$min_spaminess_delete = Options::get( self::OPTION_DELETE_SPAMINESS );
-		if ( !$result->allow && $result->spaminess >= ((int) $min_spaminess_delete / 100) ) { return false; }
+		if ( !$comment->info->defensio_allow && $comment->info->defensio_spaminess >= ((int) $min_spaminess_delete / 100) ) { return false; }
 
 		return $allow;
 	}
@@ -537,7 +537,7 @@ class Defensio extends Plugin
 					if ( isset($comment->info->defensio_allow) && $comment->info->defensio_allow ) {
 						list($errcode, $xml) = $this->defensio->putDocument( $comment->info->defensio_signature, array( 'allow' => 'false' ) );
 						if ( $errcode != 200 ) {
-							EventLog::log( "Failed to send updated allowed status of comment: $errcode", 'warning', 'plugin', 'Defensio' );
+							EventLog::log( "Failed to send updated allowed status of comment: $errcode $xml->message", 'warning', 'plugin', 'Defensio' );
 						}
 						else {
 							$comment->info->defensio_allow = false;
@@ -549,7 +549,7 @@ class Defensio extends Plugin
 					if ( isset($comment->info->defensio_allow) && !$comment->info->defensio_allow ) {
 						list($errcode, $xml) = $this->defensio->putDocument( $comment->info->defensio_signature, array( 'allow' => 'true' ) );
 						if ( $errcode != 200 ) {
-							EventLog::log( "Failed to send updated allowed status of comment: $errcode", 'warning', 'plugin', 'Defensio' );
+							EventLog::log( "Failed to send updated allowed status of comment: $errcode $xml->message", 'warning', 'plugin', 'Defensio' );
 						}
 						else {
 							$comment->info->defensio_allow = true;
