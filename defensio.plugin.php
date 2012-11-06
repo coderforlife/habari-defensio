@@ -198,13 +198,13 @@ class Defensio extends Plugin
 		if ( is_string($stats) ) { $block->error_msg = $stats; return; }
 
 		$block->error_msg = null;
-		$block->accuracy = sprintf( '%.2f', (string)$stats->accuracy * 100 );
-		$block->spam = (string)$stats->unwanted->spam;
-		$block->malicious = (string)$stats->unwanted->malicious;
-		$block->legitimate = (string)$stats->legitimate->total;
-		$block->false_negatives = (string)$stats->{'false-negatives'};
-		$block->false_positives = (string)$stats->{'false-positives'};
-		$block->learning = (string)$stats->learning;
+		$block->accuracy = sprintf( '%.2f', ((string)$stats->accuracy) * 100 );
+		$block->spam = ((string)$stats->unwanted->spam) * 1;
+		$block->malicious = ((string)$stats->unwanted->malicious) * 1;
+		$block->legitimate = ((string)$stats->legitimate->total) * 1;
+		$block->false_negatives = ((string)$stats->{'false-negatives'}) * 1;
+		$block->false_positives = ((string)$stats->{'false-positives'}) * 1;
+		$block->learning = (string)$stats->learning == 'true';
 		$block->learning_status = (string)$stats->{'learning-status'};
 	}
 	
