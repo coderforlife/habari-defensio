@@ -14,6 +14,7 @@ class Defensio extends Plugin
 
 	const DEFENSIO_CLIENT_ID = 'Habari Defensio Plugin | 2.0 | Jeffrey Bush | jeff@coderforlife.com';
 
+	const OPTION_MY_ID = 'defensio__my_id'; // used to uniquely identify this installation to prevent hacking
 	const OPTION_API_KEY = 'defensio__api_key';
 	const OPTION_FLAG_SPAMINESS = 'defensio__spaminess_flag';
 	const OPTION_DELETE_SPAMINESS = 'defensio__spaminess_delete';
@@ -24,6 +25,18 @@ class Defensio extends Plugin
 
 	private $defensio;
 
+	/**
+	 * Generates a random ID that is 32 hex characters long (representing 16 bytes or 128 bits).
+	 * @return string 32 character hex string
+	 */
+	private static function rand_id()
+	{
+		$id = '';
+		for ($i = 0; $i < 32; $i++) {
+			$id .= str_pad(dechex(mt_rand(0x0000, 0xFFFF)), 4, 0, STR_PAD_LEFT);
+		}
+		return $id;
+	}
 
 	////////// Basic Setup and Initialization //////////
 
@@ -33,6 +46,7 @@ class Defensio extends Plugin
 	public function action_plugin_activation()
 	{
 		Session::notice( _t('Please set your Defensio API Key in the configuration.', 'defensio') );
+		Options::set( self::OPTION_MY_ID, self::rand_id() );
 		if ( !is_null(Options::get(self::OPTION_API_KEY)) ) {
 			Options::set( self::OPTION_API_KEY, '' );
 		}
@@ -489,6 +503,53 @@ class Defensio extends Plugin
 	}
 
 	/**
+	 * Add the Defensio callback rewrite rule.
+	 * @param array $rules The unfiltered rewrite rules
+	 * @return array The rewrite rules with the Defensio callback added
+	 */
+	public function filter_rewrite_rules( array $rules )
+	{
+		$myid = Options::get( self::OPTION_MY_ID );
+		$rules[] = new RewriteRule(array(
+			'name'=>'defensio_callback',
+			'handler'=>'PluginHandler',
+			'action'=>'defensio_callback',
+			'priority'=>6,
+			'parse_regex'=>'%^defensio_callback~' . $myid . '~(?P<comment_id>[0-9]+)/?$%i',
+			'build_str'=>'defensio_callback~' . $myid . '~{$comment_id}',
+		));
+		return $rules;
+	}
+	
+	/**
+	 * Process the Defensio callback.
+	 * @param ActionHandler $handler The handler that processed the URL, used to get the comment ID
+	 */
+ 	public function action_plugin_act_defensio_callback( ActionHandler $handler )
+	{
+		$comment = Comment::get( $handler->handler_vars['comment_id'] * 1 );
+		if ( !$comment ) {
+			$msg = "Defensio callback had invalid comment ID";
+			EventLog::log( $msg, 'warning', 'plugin', 'Defensio' );
+		}
+		else {
+			list( $errcode, $result ) = $this->defensio->handlePostDocumentAsyncCallback();
+			if ( (string)$result->status != 'success' ) {
+				$msg = "Defensio error during callback: $errcode $result->status $result->message";
+				EventLog::log( $msg, 'warning', 'plugin', 'Defensio' );
+			}
+			else if ( !isset($comment->info->defensio_signature) || $comment->info->defensio_signature != (string)$result->signature ) {
+				$msg = "Defensio signature and comment ID do not match";
+				EventLog::log( $msg, 'warning', 'plugin', 'Defensio' );
+			}
+			else {
+				EventLog::log( "Defensio callback!", 'info', 'plugin', 'Defensio' );
+				$this->defensio_update_comment( $comment, $result );
+			}
+		}
+  	}
+
+	/**
 	 * Posts a comment to Defensio and updates it with any information. If it is unsuccessfully submitted
 	 * then its status is set to queued and a user_id is added to its information for repeated attempts.
 	 * For successes, the Defensio signature is added to the information. If the scan is still pending,
@@ -504,8 +565,7 @@ class Defensio extends Plugin
 			'platform' => 'habari',
 			'type' => strtolower( $comment->typename ), // one of: comment*, trackback*, pingback*, article, wiki, forum, other, test
 			'async' => 'true',
-			// @todo add callback
-			// 'async-callback' => ...
+			'async-callback' =>  URL::get( 'defensio_callback', array('comment_id' => $comment->id) ),
 			
 			// @todo fill these in
 			//'browser-cookies' => ...
