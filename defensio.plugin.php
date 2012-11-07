@@ -428,7 +428,7 @@ class Defensio extends Plugin
 	 * Whenever a comment is added, set it to be scanned by Defensio.
 	 * @param Comment $comment The comment object to scan
 	 */
-	public function filter_comment_insert_after( Comment $comment )
+	public function action_comment_insert_after( Comment $comment )
 	{
 		$this->defensio_post_comment( $comment, User::identify() );
 		Session::notice( _t('Your comment is being scanned for spam.', 'defensio') );
@@ -679,7 +679,7 @@ class Defensio extends Plugin
 	 * @param mixed $old_value The old status value
 	 * @param mixed $new_value The new status value
 	 */
-	public function filter_comment_update_status( Comment $comment, $old_value, $new_value )
+	public function action_comment_update_status( Comment $comment, $old_value, $new_value )
 	{
 		$new_value = Comment::status($new_value);
 		$is_approved = $new_value == Comment::status('approved');
