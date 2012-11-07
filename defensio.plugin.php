@@ -96,13 +96,14 @@ class Defensio extends Plugin
 			);
 		$api_key->add_validator( 'validate_required' );
 		$api_key->add_validator( array( $this, 'validate_api_key' ) );
+		$register = $ui->append( 'static', 'register', '<div style="margin-left:10px"><a href="http://defensio.com/signup" target="_blank">' . _t('Get a new Defensio API key.', 'defensio') . '</a></div>' );
 
 		// min spaminess flag
 		$spaminess_flag = $ui->append(
 				'select',
 				'min_spaminess_flag',
 				'option:' . self::OPTION_FLAG_SPAMINESS,
-				_t('Minimum Spaminess to Flag as Spam: ', 'defensio')
+				_t('Minimum Spaminess* to Flag as Spam: ', 'defensio')
 			);
 		$spaminess_flag->options = $spaminess_opts;
 		$spaminess_flag->add_validator( 'validate_required' );
@@ -112,10 +113,11 @@ class Defensio extends Plugin
 				'select',
 				'min_spaminess_delete',
 				'option:' . self::OPTION_DELETE_SPAMINESS,
-				_t('Minimum Spaminess to Automatically Delete: ', 'defensio')
+				_t('Minimum Spaminess* to Automatically Delete: ', 'defensio')
 			);
 		$spaminess_delete->options = $spaminess_opts;
 		$spaminess_delete->add_validator( 'validate_required' );
+		$register = $ui->append( 'static', 'register', '<div style="margin-left:10px">' . _t('* If and only if Defensio also flags the comment as spam.', 'defensio') . '</div>' );
 
 
 		// checkboxes
@@ -124,12 +126,6 @@ class Defensio extends Plugin
 		$filter_author  = $ui->append( 'checkbox', 'filter_author',  'option:' . self::OPTION_PROFANITY_FILTER_AUTHOR,  _t('Filter Profanity in Comment Author: ',      'defensio') );
 		$filter_content = $ui->append( 'checkbox', 'filter_content', 'option:' . self::OPTION_PROFANITY_FILTER_CONTENT, _t('Filter Profanity in Comment Content: ',     'defensio') );
 
-
-		$register = $ui->append(
-				'static',
-				'register',
-				'<a href="http://defensio.com/signup">' . _t('Get A New Defensio API Key.', 'defensio') . '</a>'
-			);
 
 		$ui->append( 'submit', 'save', _t( 'Save', 'defensio' ) );
 		$ui->on_success( array($this, 'formui_submit') );

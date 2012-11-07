@@ -3,7 +3,7 @@
 	<name>Defensio</name>
 	<license url="http://www.apache.org/licenses/LICENSE-2.0.html">Apache Software License 2.0</license>
 	<author url="http://habariproject.org">Habari Community</author>
-	<version>0.4</version>
+	<version>2.0-beta</version>
 	<url>http://habariproject.org</url>
 	
 	<description><![CDATA[Provides the Defensio spam filter webservice to Habari comments.]]></description>
@@ -12,33 +12,38 @@
 		<value><![CDATA[
 		<p>You will need an <a href="http://defensio.com/signup">API key from defensio</a> for the
 		filter to work. Enter the API key Defensio gives you in the Configuration.</p>
-
-		<p> You can also choose the minimum spammines allowed. Any comment with a spaminess value
-		above this value, will be marked as spam.</p>
 		
-		<p>You can also choose to announce new blog posts you make to Defensio to help Defensio
-		determine what is and what is not spam. The information sent to Defensio is as follows:</p>
+		<p>To help Defensio, make sure to change comments to spam before deleting them if they were
+		not automatically marked as spam. This tells Defensio it made a mistake. The reverse is true
+		as well: approving comments that Defensio think are spam informs Defensio.</p>
+		
+		<p>Another way to help Defensio work better is to announce new blog posts you make. If you
+		choose to announce posts to Defensio the following information is sent:</p>
 		
 		<ul>
-			<li>Author Name: The username of the posts author.</li>
-			<li>Author Email: The email address of the posts author.</li>
-			<li>Article Title: The title you give your post.</li>
-			<li>Article Content: The content of your post.</li>
-			<li>Permalink: The URI to the post.</li>
+			<li>Author name and email</li>
+			<li>Article title and content</li>
+			<li>Permalink</li>
 		</ul>
 		
-		<p>You can also choose weather or not to automatically approve comments that Defensio does
-		not think are spam. This means comments not marked as spam will show up immediately on your
-		site.</p>
+		<p>Defensio assigns a 'spaminess' rating to all comments in addition to flagging them as spam
+		or legitimate. You can choose the spaminess cutoff for comments marked as spam in Habari (but
+		only comments flagged as spam by Defensio will be considered). Leaving it at 0% means that if
+		Defensio thinks it is spam it will be marked as spam.</p>
 		
-		<p>This plugin also uses a queue system to queue comments to be scanned in case the Defensio
-		servers go down. The plugin will retry the scan every 30 seconds for a total of 6 times. 
-		Theses queued comments will show in the comments admin page marked in blue. If the Defensio
-		servers do infact fail to respond within the 6 retries, the comment will be marked 
-		unapproved and show in your moderation queue for you to decide.</p>
+		<p>You can also choose a spaminess cutoff to automatically delete messages at. Anything
+		flagged as spam with a spaminess at or above this level will be deleted.</p>
+		
+		<p>You can choose to automatically approve comments not marked as spam. This means comments
+		not marked as spam will show up immediately on your site.</p>
+		
+		<p>This plugin uses asynchronous processing of comments to improve quality of results and to
+		speed up the user interaction. While pending results they will be marked as blue in the admin
+		page. Defensio automatically sends updates as they are ready. However, just in case, the
+		plugin checks every 5 minutes for updates as well.</p>
 		]]></value>
 	</help>
 	
-	<copyright>2009</copyright>
+	<copyright>2009-2012</copyright>
 </pluggable>
  
