@@ -32,7 +32,7 @@ class Defensio extends Plugin
 	private static function rand_id()
 	{
 		$id = '';
-		for ($i = 0; $i < 32; $i++) {
+		for ($i = 0; $i < 8; $i++) {
 			$id .= str_pad(dechex(mt_rand(0x0000, 0xFFFF)), 4, 0, STR_PAD_LEFT);
 		}
 		return $id;
@@ -47,25 +47,25 @@ class Defensio extends Plugin
 	{
 		Session::notice( _t('Please set your Defensio API Key in the configuration.', 'defensio') );
 		Options::set( self::OPTION_MY_ID, self::rand_id() );
-		if ( !is_null(Options::get(self::OPTION_API_KEY)) ) {
+		if ( is_null(Options::get(self::OPTION_API_KEY)) ) {
 			Options::set( self::OPTION_API_KEY, '' );
 		}
-		if ( !is_null(Options::get(self::OPTION_FLAG_SPAMINESS)) ) {
+		if ( is_null(Options::get(self::OPTION_FLAG_SPAMINESS)) ) {
 			Options::set(self::OPTION_FLAG_SPAMINESS, 0); // WordPress default is 80%? Or does that no longer apply for API 2.0?
 		}
-		if ( !is_null(Options::get(self::OPTION_DELETE_SPAMINESS)) ) {
+		if ( is_null(Options::get(self::OPTION_DELETE_SPAMINESS)) ) {
 			Options::set(self::OPTION_DELETE_SPAMINESS, 99);
 		}
-		if ( !is_null(Options::get(self::OPTION_ANNOUNCE_POSTS)) ) {
+		if ( is_null(Options::get(self::OPTION_ANNOUNCE_POSTS)) ) {
 			Options::set(self::OPTION_ANNOUNCE_POSTS, true);
 		}
-		if ( !is_null(Options::get(self::OPTION_AUTO_APPROVE)) ) {
+		if ( is_null(Options::get(self::OPTION_AUTO_APPROVE)) ) {
 			Options::set(self::OPTION_AUTO_APPROVE, false);
 		}
-		if ( !is_null(Options::get(self::OPTION_PROFANITY_FILTER_AUTHOR)) ) {
+		if ( is_null(Options::get(self::OPTION_PROFANITY_FILTER_AUTHOR)) ) {
 			Options::set(self::OPTION_PROFANITY_FILTER_AUTHOR, false);
 		}
-		if ( !is_null(Options::get(self::OPTION_PROFANITY_FILTER_CONTENT)) ) {
+		if ( is_null(Options::get(self::OPTION_PROFANITY_FILTER_CONTENT)) ) {
 			Options::set(self::OPTION_PROFANITY_FILTER_CONTENT, false);
 		}
 				
@@ -132,7 +132,6 @@ class Defensio extends Plugin
 				_t('Minimum Spaminess* to Flag as Spam: ', 'defensio')
 			);
 		$spaminess_flag->options = $spaminess_opts;
-		$spaminess_flag->add_validator( 'validate_required' );
 
 		// min spaminess for automatic deletion
 		$spaminess_delete = $ui->append(
@@ -142,7 +141,7 @@ class Defensio extends Plugin
 				_t('Minimum Spaminess* to Automatically Delete: ', 'defensio')
 			);
 		$spaminess_delete->options = $spaminess_opts;
-		$spaminess_delete->add_validator( 'validate_required' );
+
 		$register = $ui->append( 'static', 'extra', '<div><label>' . _t('* If and only if Defensio also flags the comment as spam. See (?) for more information.', 'defensio') . '</label></div><hr>' );
 
 
@@ -565,7 +564,7 @@ class Defensio extends Plugin
 			'platform' => 'habari',
 			'type' => strtolower( $comment->typename ), // one of: comment*, trackback*, pingback*, article, wiki, forum, other, test
 			'async' => 'true',
-			'async-callback' =>  URL::get( 'defensio_callback', array('comment_id' => $comment->id) ),
+			'async-callback' => URL::get( 'defensio_callback', array('comment_id' => $comment->id) ),
 			
 			// @todo fill these in
 			//'browser-cookies' => ...
