@@ -28,21 +28,33 @@ class Defensio extends Plugin
 	////////// Basic Setup and Initialization //////////
 
 	/**
-	 * Setup defaults on activation. Don't overwrite API key if it's already there. Start Defensio Queue.
+	 * Setup defaults on activation. Don't overwrite settings if they are already there. Start Defensio Queue.
 	 */
 	public function action_plugin_activation()
 	{
 		Session::notice( _t('Please set your Defensio API Key in the configuration.', 'defensio') );
-		if ( !Options::get(self::OPTION_API_KEY) ) {
+		if ( !is_null(Options::get(self::OPTION_API_KEY)) ) {
 			Options::set( self::OPTION_API_KEY, '' );
 		}
-		Options::set(self::OPTION_FLAG_SPAMINESS, 80); // WordPress default
-		Options::set(self::OPTION_DELETE_SPAMINESS, 99);
-		Options::set(self::OPTION_ANNOUNCE_POSTS, true);
-		Options::set(self::OPTION_AUTO_APPROVE, false);
-		Options::set(self::OPTION_PROFANITY_FILTER_AUTHOR, false);
-		Options::set(self::OPTION_PROFANITY_FILTER_CONTENT, false);
-		
+		if ( !is_null(Options::get(self::OPTION_FLAG_SPAMINESS)) ) {
+			Options::set(self::OPTION_FLAG_SPAMINESS, 0); // WordPress default is 80%? Or does that no longer apply for API 2.0?
+		}
+		if ( !is_null(Options::get(self::OPTION_DELETE_SPAMINESS)) ) {
+			Options::set(self::OPTION_DELETE_SPAMINESS, 99);
+		}
+		if ( !is_null(Options::get(self::OPTION_ANNOUNCE_POSTS)) ) {
+			Options::set(self::OPTION_ANNOUNCE_POSTS, true);
+		}
+		if ( !is_null(Options::get(self::OPTION_AUTO_APPROVE)) ) {
+			Options::set(self::OPTION_AUTO_APPROVE, false);
+		}
+		if ( !is_null(Options::get(self::OPTION_PROFANITY_FILTER_AUTHOR)) ) {
+			Options::set(self::OPTION_PROFANITY_FILTER_AUTHOR, false);
+		}
+		if ( !is_null(Options::get(self::OPTION_PROFANITY_FILTER_CONTENT)) ) {
+			Options::set(self::OPTION_PROFANITY_FILTER_CONTENT, false);
+		}
+				
 		CronTab::add_cron(array(
 			'name' => 'defensio_queue',
 			'callback' => 'defensio_queue',
