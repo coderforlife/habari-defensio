@@ -445,12 +445,7 @@ class Defensio extends Plugin
 	 */
 	public function filter_defensio_queue( $cron_result = true )
 	{
-		EventLog::log( 'Defensio Queue Run Started', 'debug', 'plugin', 'Defensio' );
-
 		$comments = Comments::get( array('status' => self::COMMENT_STATUS_QUEUED) );
-
-		EventLog::log( 'Defensio Queue: Comments: '.count($comments), 'debug', 'plugin', 'Defensio' );
-		
 		foreach( $comments as $comment ) {
 			if ( self::comment_age( $comment ) > self::MAX_COMMENT_DAYS ) {
 				$msg = "Defensio comment submission was pending or failed for 30 days. Will not try again.";
@@ -466,7 +461,6 @@ class Defensio extends Plugin
 					EventLog::log( $msg, 'warning', 'plugin', 'Defensio' );
 				}
 				else if ( $status == 'success' ) {
-					EventLog::log( 'Defensio Queue: Got document', 'debug', 'plugin', 'Defensio' );
 					$this->defensio_update_comment( $comment, $result );
 				}
 				else {
@@ -483,9 +477,6 @@ class Defensio extends Plugin
 				
 			}
 		}
-
-		EventLog::log( 'Defensio Queue Run Finished', 'debug', 'plugin', 'Defensio' );
-
 		return $cron_result;
 	}
 
@@ -500,8 +491,6 @@ class Defensio extends Plugin
 	 */
 	private function defensio_post_comment( Comment $comment, $user )
 	{
-		EventLog::log( 'Posting Comment to Defensio Started', 'debug', 'plugin', 'Defensio' );
-
 		// setup data to post
 		$params = array(
 			'platform' => 'habari',
@@ -535,8 +524,16 @@ class Defensio extends Plugin
 				$http_headers[$key] = $value;
 			}
 		}
-		$headers = @getallheaders();
-		if ($headers !== FALSE) {
+		if (is_callable('apache_request_headers')) {
+			$headers = @apache_request_headers();
+		}
+		else if (is_callable('getallheaders')) {
+			$headers = @getallheaders();
+		}
+		else {
+			$headers = false;
+		}
+		if ($headers !== false) {
 			foreach ( $headers as $key => $value ) {
 				$http_headers[str_replace('-', '_', strtoupper($key))] = $value;
 			}
@@ -581,8 +578,6 @@ class Defensio extends Plugin
 				$this->defensio_update_comment( $comment, $result );
 			}
 		}
-
-		EventLog::log( 'Posting Comment to Defensio Ended', 'debug', 'plugin', 'Defensio' );
 	}
 
 	/**
@@ -592,15 +587,11 @@ class Defensio extends Plugin
 	 */
 	private function defensio_update_comment( Comment $comment, SimpleXMLElement $data )
 	{
-		EventLog::log( 'Updating Comment to Defensio Started', 'debug', 'plugin', 'Defensio' );
-		
 		// copy the Defensio data
 		$comment->info->defensio_allow           = $allow     =  (string)$data->allow == 'true';
-		$comment->info->defensio_classification  = $type      =  (string)$data->classification; // innocent, spam, and malicious
+		$comment->info->defensio_classification  = $type      =  (string)$data->classification; // legitimate, spam, and malicious
 		$comment->info->defensio_spaminess       = $spaminess = ((string)$data->spaminess) * 100.0;
 		$comment->info->defensio_profanity_match =               (string)$data->{'profanity-match'} == 'true';
-
-		EventLog::log( 'Comment: '.$allow.' '.$type.' '.$spaminess, 'debug', 'plugin', 'Defensio' );
 
 		// see if it's spam or the spaminess is greater than min allowed spaminess
 		$min_spaminess_flag = Options::get( self::OPTION_FLAG_SPAMINESS );
@@ -609,8 +600,8 @@ class Defensio extends Plugin
 			$comment->delete();
 		}
 		else {
-			if ( !$allow || $type != 'innocent' ) { self::append_spamcheck( $comment, _t('Defensio flagged as \'%s\'',                 array( $type ),      'defensio') ); }
-			if ( $spaminess > 0 )                 { self::append_spamcheck( $comment, _t('Defensio gave a spaminess rating of %.2f%%', array( $spaminess ), 'defensio') ); }
+			if ( !$allow || $type != 'legitimate' ) { self::append_spamcheck( $comment, _t('Defensio flagged as \'%s\'',                 array( $type ),      'defensio') ); }
+			if ( $spaminess > 0 )                   { self::append_spamcheck( $comment, _t('Defensio gave a spaminess rating of %.2f%%', array( $spaminess ), 'defensio') ); }
 
 			if ( !$allow && $spaminess >= $min_spaminess_flag ) {
 				$comment->status = 'spam';
@@ -627,7 +618,8 @@ class Defensio extends Plugin
 			$comment->update();
 		}
 
-		EventLog::log( 'Updating Comment to Defensio Ended', 'debug', 'plugin', 'Defensio' );
+		Cache::expire( 'defensio_stats' );
+		Cache::expire( 'defensio_extended_stats' );
 	}
 	
 	/**
@@ -855,11 +847,11 @@ class Defensio extends Plugin
 	public function action_comment_info( Comment $comment )
 	{
 		if ( isset($comment->info->defensio_classification) ) {
-			$start = '<p class="keyval' . ( $comment->info->defensio_classification == 'innocent' ? '' : ' spam' ) . '"><span class="label">';
+			$start = '<p class="keyval' . ( $comment->info->defensio_classification == 'legitimate' ? '' : ' spam' ) . '"><span class="label">';
 			if ( isset($comment->info->defensio_spaminess) ) {
 				echo $start . _t('Defensio Spaminess:', 'defensio') . '</span><strong>' . $comment->info->defensio_spaminess . '%</strong></p>';
 			}
-			echo $start . _t('Defensio Classification:', 'defensio') . '</span><strong>' . _t($comment->info->defensio_classification, 'defensio') . '</strong></p>';
+			echo $start . _t('Defensio Type:', 'defensio') . '</span><strong>' . _t($comment->info->defensio_classification, 'defensio') . '</strong></p>';
 		}
 	}
 	
