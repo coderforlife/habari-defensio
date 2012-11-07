@@ -117,7 +117,7 @@ class Defensio extends Plugin
 			);
 		$spaminess_delete->options = $spaminess_opts;
 		$spaminess_delete->add_validator( 'validate_required' );
-		$register = $ui->append( 'static', 'register', '<div style="margin-left:10px">' . _t('* If and only if Defensio also flags the comment as spam.', 'defensio') . '</div>' );
+		$register = $ui->append( 'static', 'extra', '<div style="margin-left:10px">' . _t('* If and only if Defensio also flags the comment as spam. See (?) for more information.', 'defensio') . '</div>' );
 
 
 		// checkboxes
