@@ -739,8 +739,12 @@ class Defensio extends Plugin
 	 */
 	public function action_comment_info( Comment $comment )
 	{
-		if ( isset($comment->info->defensio_spaminess) ) {
-			echo '<p class="keyval spam"><span class="label">' . _t('Defensio Spaminess:', 'defensio') . '</span>' . '<strong>' . ($comment->info->defensio_spaminess) . '%</strong></p>';
+		if ( isset($comment->info->defensio_classification) ) {
+			$start = '<p class="keyval' . ( $comment->info->defensio_classification == 'innocent' ? '' : ' spam' ) . '"><span class="label">';
+			if ( isset($comment->info->defensio_spaminess) ) {
+				echo $start . _t('Defensio Spaminess:', 'defensio') . '</span><strong>' . $comment->info->defensio_spaminess . '%</strong></p>';
+			}
+			echo $start . _t('Defensio Classification:', 'defensio') . '</span><strong>' . _t($comment->info->defensio_classification, 'defensio') . '</strong></p>';
 		}
 	}
 	
