@@ -41,6 +41,11 @@
 		speed up the user interaction. While pending results they will be marked as blue in the admin
 		page. Defensio automatically sends updates as they are ready. However, just in case, the
 		plugin checks every 5 minutes for updates as well.</p>
+		
+		<p>This plugin also includes access to the Defensio profanity filter. You can enable for
+		comment contents and/or author names. Enabling author name filtering may slow down pages with
+		large numbers of comments. The filtering will not change the actual content of comments but
+		instead modifies the output so you can still examine the originals.</p>
 		]]></value>
 	</help>
 	
