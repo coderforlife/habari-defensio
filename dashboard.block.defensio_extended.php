@@ -3,6 +3,6 @@
 if ( $content->error_msg ) {
     echo $content->error_msg;
 } else {
-    echo "<img src='{$content->charts['recent-accuracy']}>";
+    echo "<img src='{$content->charts['recent-accuracy']}' style='max-width:100%;max-height:100%;'>";
 }
 ?>
