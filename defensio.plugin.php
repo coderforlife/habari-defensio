@@ -83,7 +83,7 @@ class Defensio extends Plugin
 	{
 		$spaminess_keys = $spaminess_values = range(0, 95, 5);
 		foreach ($spaminess_keys as &$x) { $x .= '%'; }
-		$spaminess_opts = array_combine(array_merge($spaminess_keys, array('99%', 'Never')), array_merge($spaminess_values, array(99, 100)));
+		$spaminess_opts = array_combine(array_merge($spaminess_values, array(99, 100)), array_merge($spaminess_keys, array('99%', 'Never')));
 		
 		$ui = new FormUI( 'defensio' );
 
