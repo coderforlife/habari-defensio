@@ -6,7 +6,7 @@ if ( $content->error_msg ) {
 } else {
 ?>
 		<li class="item clear">
-			<span class="title pct80"><b>Recent Accuracy</b></span><span class="comments pct20"><?php echo $content->accuracy; ?>%</span>
+			<span class="title pct80"><b>Recent Accuracy</b></span><span class="comments pct20"><?php echo sprintf( '%.2f', $content->accuracy); ?>%</span>
 		</li>
 		<li class="item clear">
 			<span class="pct80">Spam</span><span class="comments pct20"><?php echo $content->spam; ?></span>

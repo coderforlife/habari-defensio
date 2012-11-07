@@ -69,6 +69,7 @@ class Defensio extends Plugin
 		$this->defensio = new DefensioAPI( Options::get( self::OPTION_API_KEY ), self::DEFENSIO_CLIENT_ID );
 		$this->load_text_domain( 'defensio' );
 		$this->add_template( 'dashboard.block.defensio', __DIR__ . '/dashboard.block.defensio.php' );
+		$this->add_template( 'dashboard.block.defensio_extended', __DIR__ . '/dashboard.block.defensio_extended.php' );
 	}
 
 
@@ -188,6 +189,7 @@ class Defensio extends Plugin
 	{
 		if (User::identify()->can('manage_all_comments')) {
 			$block_list['defensio'] = _t( 'Defensio', 'defensio' );
+			$block_list['defensio_extended'] = _t( 'Defensio Extended', 'defensio_extended' );
 		}
 		return $block_list;
 	}
@@ -200,6 +202,7 @@ class Defensio extends Plugin
 	public function filter_dashboard_block_list( $block_list )
 	{
 		$block_list['defensio'] = _t( 'Defensio', 'defensio' );
+		$block_list['defensio_extended'] = _t( 'Defensio Extended', 'defensio_extended' );
 		return $block_list;
 	}
 
@@ -217,14 +220,55 @@ class Defensio extends Plugin
 		if ( is_string($stats) ) { $block->error_msg = $stats; return; }
 
 		$block->error_msg = null;
-		$block->accuracy = sprintf( '%.2f', ((string)$stats->accuracy) * 100 );
-		$block->spam = ((string)$stats->unwanted->spam) * 1;
-		$block->malicious = ((string)$stats->unwanted->malicious) * 1;
-		$block->legitimate = ((string)$stats->legitimate->total) * 1;
+		$block->accuracy        = ((string)$stats->accuracy) * 100.0;
+		$block->spam            = ((string)$stats->unwanted->spam) * 1;
+		$block->malicious       = ((string)$stats->unwanted->malicious) * 1;
+		$block->legitimate      = ((string)$stats->legitimate->total) * 1;
 		$block->false_negatives = ((string)$stats->{'false-negatives'}) * 1;
 		$block->false_positives = ((string)$stats->{'false-positives'}) * 1;
-		$block->learning = (string)$stats->learning == 'true';
-		$block->learning_status = (string)$stats->{'learning-status'};
+		$block->learning        =  (string)$stats->learning == 'true';
+		$block->learning_status =  (string)$stats->{'learning-status'};
+	}
+
+	/**
+	 * Produce the content for the Defensio Extended block
+	 * @param Block $block The block object
+	 * @param Theme $theme The theme that the block will be output with
+	 */
+	public function action_block_content_defensio_extended( $block, Theme $theme )
+	{
+		$block->link = URL::get('admin', array('page' => 'comments'));
+
+		$stats = $this->defensio_stats();
+		// show an error in the dashboard if Defensio returns a bad response.
+		if ( is_string($stats) ) { $block->error_msg = $stats; return; }
+
+		$block->error_msg = null;
+		$block->charts = array(
+			'recent-accuracy'  => (string)$stats->{'chart-urls'}->{'recent-accuracy' },
+			'total-unwanted'   => (string)$stats->{'chart-urls'}->{'total-unwanted'  },
+			'total-legitimate' => (string)$stats->{'chart-urls'}->{'total-legitimate'},
+		);
+		
+		$data = array();
+		foreach ($stats->data->datum as $datum) {
+			$data[] = array(
+				'date'            =>  (string)$datum->date, // Y-m-d
+				'accuracy'        => ((string)$datum->accuracy) * 100.0,
+				'unwanted'        => ((string)$datum->unwanted) * 1,
+				'legitimate'      => ((string)$datum->legitimate) * 1,
+				'false-positives' => ((string)$datum->{'false-positives'}) * 1,
+				'false-negatives' => ((string)$datum->{'false-negatives'}) * 1,
+			);
+		}
+		
+		// to get arrays of each field:
+		// $date            = array_map(create_function('$x', 'return $x[\'date\'];'           ), $data);
+		// $accuracy        = array_map(create_function('$x', 'return $x[\'accuracy\'];'       ), $data);
+		// $unwanted        = array_map(create_function('$x', 'return $x[\'unwanted\'];'       ), $data);
+		// $legitimate      = array_map(create_function('$x', 'return $x[\'legitimate\'];'     ), $data);
+		// $false_positives = array_map(create_function('$x', 'return $x[\'false-positives\'];'), $data);
+		// $false_negatives = array_map(create_function('$x', 'return $x[\'false-negatives\'];'), $data);
 	}
 	
 	/**
@@ -239,7 +283,7 @@ class Defensio extends Plugin
 		else {
 			list( $errcode, $stats ) = $this->defensio->getBasicStats();
 			if ( $errcode != 200 || (string)$stats->status != 'success' ) {
-				$msg = "Defensio error while getting stats: $errcode $stats->message";
+				$msg = "Defensio error while getting stats: $errcode $stats->status $stats->message";
 				EventLog::log( $msg, 'warning', 'plugin', 'Defensio' );
 				return $msg;
 			}
@@ -253,8 +297,6 @@ class Defensio extends Plugin
 	 * Get the extended Defensio stats given a date range.
 	 * @param mixed $from int with Unix timestamp or string parsable by strtotime
 	 * @param mixed $to int with Unix timestamp, string parsable by strtotime, or if not provided 30 days after from
-	 * @todo add caching (at least for most recent one)
-	 * @todo display somewhere
 	 * @return mixed The stats as SimpleXMLElement or a string with an error message.
 	 */
 	private function defensio_extended_stats( $from, $to = null )
@@ -272,7 +314,7 @@ class Defensio extends Plugin
 		
 		list( $errcode, $stats ) = $this->defensio->getExtendedStats(array( 'from' => $from, 'to' => $to ));
 		if ( $errcode != 200 || (string)$stats->status != 'success' ) {
-			$msg = "Defensio error while getting extended stats: $errcode $stats->message";
+			$msg = "Defensio error while getting extended stats: $errcode $stats->status $stats->message";
 			EventLog::log( $msg, 'warning', 'plugin', 'Defensio' );
 			return $msg;
 		}
@@ -280,6 +322,27 @@ class Defensio extends Plugin
 		return $stats;
 	}
 
+	/**
+	 * Get the extended Defensio stats for the last 30 days.
+	 * @todo display somewhere
+	 * @return mixed The stats as SimpleXMLElement or a string with an error message.
+	 */
+	private function defensio_recent_extended_stats()
+	{
+		if ( Cache::has( 'defensio_extended_stats' ) ) {
+			$stats = simplexml_load_string( Cache::get( 'defensio_extended_stats' ) );
+		}
+		else {
+			$stats = $this->defensio_extended_stats( strtotime('-30 days'), time() );
+			if ( is_string($stats) ) {
+				return $stats;
+			}
+			Cache::set( 'defensio_extended_stats', $stats->asXML() );
+		}
+		
+		return $stats;
+	}
+	
 
 	////////// Profanity Filtering //////////
 	
@@ -344,7 +407,7 @@ class Defensio extends Plugin
 		// send data
 		list( $errcode, $filtered ) = $this->defensio->postProfanityFilter( $in );
 		if ( $errcode != 200 || (string)$filtered->status != 'success' ) {
-			$msg = "Defensio error while running profanity filter: $errcode $filtered->message";
+			$msg = "Defensio error while running profanity filter: $errcode $filtered->status $filtered->message";
 			EventLog::log( $msg, 'warning', 'plugin', 'Defensio' );
 			return $data;
 		}
@@ -395,7 +458,7 @@ class Defensio extends Plugin
 				list( $errcode, $result ) = $this->defensio->getDocument( $comment->info->defensio_signature );
 				$status = (string)$result->status;
 				if ( $errcode != 200 || ( $status != 'success' && $status != 'pending' ) ) {
-					$msg = "Defensio error while getting comment results: $errcode $result->message\nWill try again.";
+					$msg = "Defensio error while getting comment results: $errcode $status $result->message\nWill try again.";
 					EventLog::log( $msg, 'warning', 'plugin', 'Defensio' );
 				}
 				else if ( $status == 'success' ) {
@@ -485,7 +548,7 @@ class Defensio extends Plugin
 		list( $errcode, $result ) = $this->defensio->postDocument( $params );
 		$status = (string)$result->status;
 		if ( $errcode != 200 || ( $status != 'success' && $status != 'pending' ) ) {
-			$msg = "Defensio error while submitting comment: $errcode $result->message\nWill queue to try again.";
+			$msg = "Defensio error while submitting comment: $errcode $status $result->message\nWill queue to try again.";
 			EventLog::log( $msg, 'warning', 'plugin', 'Defensio' );
 			$comment->status = self::COMMENT_STATUS_QUEUED;
 			self::append_spamcheck( _t('Queued for Defensio scan.', 'defensio') );
@@ -563,7 +626,10 @@ class Defensio extends Plugin
 	}
 	
 	/**
-	 * 
+	 * When comments are moderated send the results back to Defensio.
+	 * @param string $action The moderation action - the only ones dealt with in this function are 'spam' and 'approve', all others are ignored
+	 * @param Comments $comments The comments that are being moderated
+	 * @param AdminHandler $handler The handler that is performing the moderation
 	 */
 	public function action_admin_moderate_comments( $action, Comments $comments, AdminHandler $handler )
 	{
@@ -581,13 +647,22 @@ class Defensio extends Plugin
 		}
 
 		// report on what was done
-		if ( $falses > 0 ) {
-			Cache::expire('defensio_stats');
-			Cache::expire('defensio_extended_stats');
-			$kind = $allowed ? 'positive' : 'negative';
-			$msg = sprintf( _n( "Reported %d false $kind to Defensio", "Reported %d false {$kind}s to Defensio", $falses, 'defensio' ), $falses );
-			EventLog::log( $msg, 'info', 'plugin', 'Defensio' );
-			Session::notice( $msg );
+		$this->report_defensio_update( $allowed, $falses );
+	}
+	
+	/**
+	 * When comment status is updated, update Defensio
+	 * @param Comment $comment The comment being updated
+	 * @param mixed $old_value The old status value
+	 * @param mixed $new_value The new status value
+	 */
+	public function filter_comment_update_status( Comment $comment, $old_value, $new_value )
+	{
+		$new_value = Comment::status($new_value);
+		$is_approved = $new_value == Comment::status('approved');
+		$is_spam = $new_value == Comment::status('spam');
+		if ( ($is_approved || $is_spam) && $this->defensio_update_status( $comment, $is_approved ) ) {
+			$this->report_defensio_update( $allowed, 1 );
 		}
 	}
 	
@@ -610,7 +685,7 @@ class Defensio extends Plugin
 				list($errcode, $result) = $this->defensio->putDocument( $comment->info->defensio_signature, array( 'allow' => $allowed ? 'true' : 'false' ) );
 				$status = (string)$result->status;
 				if ( $errcode != 200 || ( $status != 'success' && $status != 'pending' ) ) {
-					EventLog::log( "Failed to send updated status of comment: $errcode $result->message", 'warning', 'plugin', 'Defensio' );
+					EventLog::log( "Failed to send updated status of comment: $errcode $status $result->message", 'warning', 'plugin', 'Defensio' );
 				}
 				else if ( $status != 'pending' ) {
 					// update Defensio information
@@ -628,6 +703,23 @@ class Defensio extends Plugin
 			// not a Defensio comment
 		}
 		return false;
+	}
+	
+	/**
+	 * Report the results from a Defensio status update.
+	 * @param bool $allowed If the new comment status was being set to allowed (approved) or not (spam)
+	 * @param int $falses The number of updated Defensio statuses.
+	 */
+	private function report_defensio_update($allowed, $falses = 1)
+	{
+		if ( $falses > 0 ) {
+			Cache::expire( 'defensio_stats' );
+			Cache::expire( 'defensio_extended_stats' );
+			$kind = $allowed ? 'positive' : 'negative';
+			$msg = sprintf( _n( "Reported %d false $kind to Defensio", "Reported %d false {$kind}s to Defensio", $falses, 'defensio' ), $falses );
+			EventLog::log( $msg, 'info', 'plugin', 'Defensio' );
+			Session::notice( $msg );
+		}
 	}
 	
 	/**
@@ -669,7 +761,7 @@ class Defensio extends Plugin
 			// submit
 			list( $errcode, $result ) = $this->defensio->postDocument( $params );
 			if ( $errcode != 200 || $result->status != 'success' ) {
-				$msg = "Defensio error while announcing post: $errcode $result->message";
+				$msg = "Defensio error while announcing post: $errcode $result->status $result->message";
 				EventLog::log( $msg, 'warning', 'plugin', 'Defensio' );
 			}
 		}
