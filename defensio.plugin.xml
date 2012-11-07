@@ -10,8 +10,9 @@
 	
 	<help>
 		<value><![CDATA[
-		<p>You will need an <a href="http://defensio.com/signup">API key from defensio</a> for the
-		filter to work. Enter the API key Defensio gives you in the Configuration.</p>
+		<p>You will need an <a href="http://defensio.com/signup" target="_blank">API key from
+		Defensio</a> for the filter to work. Enter the API key Defensio gives you in the plugin
+		configuration.</p>
 		
 		<p>To help Defensio, make sure to change comments to spam before deleting them if they were
 		not automatically marked as spam. This tells Defensio it made a mistake. The reverse is true
