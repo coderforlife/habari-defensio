@@ -4,11 +4,12 @@ require_once __DIR__ . '/Defensio.php';
 
 /**
  * @package Defensio
+ * @todo add speicific comment ID to EventLog::log()s
  */
 class Defensio extends Plugin
 {
-	const MAX_RETRIES = 10;
-	const RETRY_INTERVAL = 30;
+	const CHECK_FREQUENCY = 300; // 5 min
+	const MAX_COMMENT_DAYS = 30;
 	const COMMENT_STATUS_QUEUED = 9;
 
 	const DEFENSIO_CLIENT_ID = 'Habari Defensio Plugin | 2.0 | Jeffrey Bush | jeff@coderforlife.com';
@@ -23,20 +24,11 @@ class Defensio extends Plugin
 
 	private $defensio;
 
-	/**
-	 * Set the priority of 'action_comment_insert_before' to 1, so we are close to first to run
-	 * before Comment insertion.
-	 * @return array The customized priority
-	 */
-	public function set_priorities()
-	{
-		return array(
-			'action_comment_insert_before' => 1
-		);
-	}
+
+	////////// Basic Setup and Initialization //////////
 
 	/**
-	 * Setup defaults on activation. Don't overwrite API key if it's already there.
+	 * Setup defaults on activation. Don't overwrite API key if it's already there. Start Defensio Queue.
 	 */
 	public function action_plugin_activation()
 	{
@@ -50,7 +42,37 @@ class Defensio extends Plugin
 		Options::set(self::OPTION_AUTO_APPROVE, false);
 		Options::set(self::OPTION_PROFANITY_FILTER_AUTHOR, false);
 		Options::set(self::OPTION_PROFANITY_FILTER_CONTENT, false);
+		
+		CronTab::add_cron(array(
+			'name' => 'defensio_queue',
+			'callback' => 'defensio_queue',
+			'increment' => self::CHECK_FREQUENCY,
+			'cron_class' => CronJob::CRON_PLUGIN,
+			'description' => _t('Scan comments with Defensio that were pending and failed queued the first time', 'defensio'),
+		));
 	}
+
+	/**
+	 * Stop Defensio Queue.
+	 */
+	function action_plugin_deactivation()
+	{
+		CronTab::delete_cronjob('defensio_queue');
+	}
+
+	/**
+	 * Setup the Defensio API on Habari initialization. Also, make sure to register the dashboard template.
+	 * @todo move text domain loading to only admin.
+	 */
+	public function action_init()
+	{
+		$this->defensio = new DefensioAPI( Options::get( self::OPTION_API_KEY ), self::DEFENSIO_CLIENT_ID );
+		$this->load_text_domain( 'defensio' );
+		$this->add_template( 'dashboard.block.defensio', __DIR__ . '/dashboard.block.defensio.php' );
+	}
+
+
+	////////// Configuration //////////
 
 	/**
 	 * Implement the simple plugin configuration.
@@ -64,7 +86,7 @@ class Defensio extends Plugin
 		
 		$ui = new FormUI( 'defensio' );
 
-		// Add a text control for the address you want the email sent to
+		// add a text control for the address you want the email sent to
 		$api_key = $ui->append(
 				'text',
 				'api_key',
@@ -123,6 +145,11 @@ class Defensio extends Plugin
 		$form->save();
 	}
 
+	/**
+	 * Trims a hostname so that it is in a standardized format, removing http://, https://, or www. from the beginning of it.
+	 * @param string $host The hostname to trim
+	 * @return string The trimmed hostname
+	 */
 	private static function trim_hostname($host)
 	{
 		$host = trim($host);
@@ -139,26 +166,18 @@ class Defensio extends Plugin
 	 */
 	public function validate_api_key( $key )
 	{
-		$host = trim_hostname( Site::get_url( 'hostname' ) );
+		$host = self::trim_hostname( Site::get_url( 'hostname' ) );
 		$defensio = new DefensioAPI( $key, self::DEFENSIO_CLIENT_ID );
 		list( $errcode, $xml ) = $defensio->getUser();
 		if ( $errcode == 200 && $xml->status == 'success' ) {
-			return trim_hostname( $xml->{'owner-url'} ) == $host ? array() :
+			return self::trim_hostname( $xml->{'owner-url'} ) == $host ? array() :
 				array(_t('Sorry, the Defensio API key <b>%s</b> is not registered for this site (%s).', array( $key, $host ), 'defensio'));
 		}
 		return array(_t('Sorry, the Defensio API key <b>%s</b> is invalid. Please check to make sure the key is entered correctly. Defensio said: "%s"', array( $key, $xml->message ), 'defensio'));
 	}
-
-	/**
-	 * Setup the Defensio API on Habari initialization.
-	 * @todo move text domain loading to only admin.
-	 */
-	public function action_init()
-	{
-		$this->defensio = new DefensioAPI( Options::get( self::OPTION_API_KEY ), self::DEFENSIO_CLIENT_ID );
-		$this->load_text_domain( 'defensio' );
-		$this->add_template( 'dashboard.block.defensio', __DIR__ . '/dashboard.block.defensio.php' );
-	}
+	
+	
+	////////// Dashboard Block //////////
 	
 	/**
 	 * Add the blocks this plugin provides to the list of available blocks
@@ -194,7 +213,7 @@ class Defensio extends Plugin
 		$block->link = URL::get('admin', array('page' => 'comments'));
 
 		$stats = $this->defensio_stats();
-		// Show an error in the dashboard if Defensio returns a bad response.
+		// show an error in the dashboard if Defensio returns a bad response.
 		if ( is_string($stats) ) { $block->error_msg = $stats; return; }
 
 		$block->error_msg = null;
@@ -212,7 +231,7 @@ class Defensio extends Plugin
 	 * Get the basic Defensio stats.
 	 * @return mixed The stats as SimpleXMLElement or a string with an error message.
 	 */
-	public function defensio_stats()
+	private function defensio_stats()
 	{
 		if ( Cache::has( 'defensio_stats' ) ) {
 			$stats = simplexml_load_string( Cache::get( 'defensio_stats' ) );
@@ -238,7 +257,7 @@ class Defensio extends Plugin
 	 * @todo display somewhere
 	 * @return mixed The stats as SimpleXMLElement or a string with an error message.
 	 */
-	public function defensio_extended_stats($from, $to = null)
+	private function defensio_extended_stats( $from, $to = null )
 	{
 		// convert the 'from' time
 		if ( is_string( $from ) ) { $from = strtotime( $from ); }
@@ -262,6 +281,36 @@ class Defensio extends Plugin
 	}
 
 
+	////////// Profanity Filtering //////////
+	
+	/**
+	 * Filters the comment content for profanity if the user has enabled it
+	 * @param string $comment The unfiltered content of the comment
+	 * @param Comment $comment The comment being filtered
+	 * @return string The content, filtered for profanity if the option is set
+	 */
+	public function filter_comment_content_out( $content, Comment $comment )
+	{
+		if ( Options::get( self::OPTION_PROFANITY_FILTER_CONTENT ) && $comment->info->defensio_profanity_match ) {
+			$content = $this->defensio_profanity_filter( $content );
+		}
+		return $content;
+	}
+
+	/**
+	 * Filters the comment author name for profanity if the user has enabled it
+	 * @param string $comment The unfiltered author name of the comment
+	 * @param Comment $comment The comment being filtered
+	 * @return string The author name, filtered for profanity if the option is set
+	 */
+	public function filter_comment_name_out( $name, Comment $comment )
+	{
+		if ( Options::get( self::OPTION_PROFANITY_FILTER_AUTHOR ) ) {
+			$name = $this->defensio_profanity_filter( $name );
+		}
+		return $name;
+	}
+	
 	/**
 	 * Filter out profanity with the Defensio.
 	 * @param mixed $data string with text to filter or an array of strings to filter
@@ -273,6 +322,7 @@ class Defensio extends Plugin
 			$in = array( 'text' => $data );
 		}
 		else {
+			// convert array names to xml-compatible element names
 			$in = array();
 			$map = array();
 			foreach ( $data as $key => $value ) {
@@ -290,6 +340,8 @@ class Defensio extends Plugin
 				$map[$key_xml] = $key;
 			}
 		}
+		
+		// send data
 		list( $errcode, $filtered ) = $this->defensio->postProfanityFilter( $in );
 		if ( $errcode != 200 || (string)$filtered->status != 'success' ) {
 			$msg = "Defensio error while running profanity filter: $errcode $filtered->message";
@@ -297,6 +349,7 @@ class Defensio extends Plugin
 			return $data;
 		}
 		
+		// convert back to input format
 		if ( is_string($data) )
 			return (string)$filtered->filtered->text;
 		$out = array();
@@ -305,56 +358,97 @@ class Defensio extends Plugin
 		return $out;
 	}
 	
+	
+	////////// Comment Scanning //////////
+	
 	/**
-	 * @todo cache results (at least for this iteration)
-	 * @todo use defensio_profanity_match
+	 * Whenever a comment is added, set it to be scanned by Defensio.
+	 * @param Comment $comment The comment object to scan
 	 */
-	public function filter_comment_content_out($content, $comment)
+	public function filter_comment_insert_after( Comment $comment )
 	{
-		if ( Options::get( self::OPTION_PROFANITY_FILTER_CONTENT ) ) {
-			$content = $this->defensio_profanity_filter( $content );
-		}
-		return $content;
+		$this->defensio_post_comment( $comment, User::identify() );
+		Session::notice( _t('Your comment is being scanned for spam.', 'defensio') );
 	}
 
 	/**
-	 * @todo cache results (at least for this iteration)
+	 * The Defensio polling queue. Checks queued comments:
+	 *  * removes them from the queue if they have been there for more than 30 days
+	 *  * removes them is the pending asynchronous result is complete
+	 *  * re-submits a request if the original failed
+	 * This runs every 5 minutes.
+	 * @param bool $cron_result The cron result, which is simply ignored and returned
+	 * @return bool The given cron result, defaulting to true
 	 */
-	public function filter_comment_name_out($name, $comment)
+	public function filter_defensio_queue( $cron_result = true )
 	{
-		if ( Options::get( self::OPTION_PROFANITY_FILTER_AUTHOR ) ) {
-			$name = $this->defensio_profanity_filter( $name );
+		$comments = Comments::get( array('status' => self::COMMENT_STATUS_QUEUED) );
+		
+		foreach( $comments as $comment ) {
+			if ( self::comment_age( $comment ) > self::MAX_COMMENT_DAYS ) {
+				$msg = "Defensio comment submission was pending or failed for 30 days. Will not try again.";
+				EventLog::log( $msg, 'warning', 'plugin', 'Defensio' );
+			}
+			else if ( isset($comment->info->defensio_signature) ) {
+				
+				// check pending asynchronous result
+				list( $errcode, $result ) = $this->defensio->getDocument( $comment->info->defensio_signature );
+				$status = (string)$result->status;
+				if ( $errcode != 200 || ( $status != 'success' && $status != 'pending' ) ) {
+					$msg = "Defensio error while getting comment results: $errcode $result->message\nWill try again.";
+					EventLog::log( $msg, 'warning', 'plugin', 'Defensio' );
+				}
+				else if ( $status == 'success' ) {
+					$this->defensio_update_comment( $comment, $result );
+				}
+				// else still pending
+				
+			}
+			else {
+				
+				// resubmit failed attempt
+				$this->defensio_post_comment( $comment, User::get_by_id($comment->info->user_id) );
+				
+			}
 		}
-		return $name;
+
+		return $cron_result;
 	}
-	
+
 	/**
-	 * Scan a comment with Defensio and dissallow it if its spaminess is above threshold.
-	 * @param Comment $comment The comment object to scan
+	 * Posts a comment to Defensio and updates it with any information. If it is unsuccessfully submitted
+	 * then its status is set to queued and a user_id is added to its information for repeated attempts.
+	 * For successes, the Defensio signature is added to the information. If the scan is still pending,
+	 * its status is set to queued, otherwise it is sent to defensio_update_comment which will setup the
+	 * remaining Defensio properties and adjust the property.
+	 * @param Comment $comment The comment to submit
+	 * @param mixed $user Either a User object or false representing the comment's author
 	 */
-	public function filter_comment_insert_allow( $allow, $comment )
+	private function defensio_post_comment( Comment $comment, $user )
 	{
-		$user = User::identify();
+		// setup data to post
 		$params = array(
 			'platform' => 'habari',
 			'type' => strtolower( $comment->typename ), // one of: comment*, trackback*, pingback*, article, wiki, forum, other, test
+			'async' => 'true',
+			// @todo add callback
+			// 'async-callback' => ...
 			
 			// @todo fill these in
-			//'browser-cookies' => 
-			//'browser-javascript' => 
+			//'browser-cookies' => ...
+			//'browser-javascript' => ...
 
 			'parent-document-date' => $comment->post->pubdate->format( 'Y-m-d' ),
 			'parent-document-permalink' => $comment->post->permalink,
 
 			'author-name' => $comment->name,
 			'author-ip' => is_string( $comment->ip ) && strpos( $comment->ip, '.' ) > 0 ? $comment->ip : long2ip( $comment->ip ),
-			// @todo is there any way around the id issue?
-			//'document-permalink' => $comment->post->permalink.'#comment-'.$comment->id, // 'id' not available until after insertion
+			'document-permalink' => $comment->post->permalink.'#comment-'.$comment->id,
 			//'title' => ... // comments have no title
 			'content' => $comment->content,
 		);
 		
-		// Set HTTP header fields
+		// set HTTP header fields
 		if ( isset( $_SERVER['HTTP_REFERER'] ) ) { $params['referrer'] = $_SERVER['HTTP_REFERER']; }
 		$http_headers = array();
 		foreach ( $_SERVER as $key => $value ) {
@@ -375,200 +469,192 @@ class Defensio extends Plugin
 		foreach ( $http_headers as $key => $value ) {
 			$http_headers_text .= "$key: $value\n";
 		}
-		$params['http-headers'] = trim($http_headers_text);
+		$params['http-headers'] = trim( $http_headers_text, "\n" );
 
-		// Set additional, conditional, fields
+		// set additional/conditional fields
 		if ( $comment->email ) { $params['author-email'] = $comment->email; }
-		if ( $comment->url )   { $params['author-url'] = $comment->url; }
-		if ( $user instanceof User ) {
+		if ( $comment->url )   { $params['author-url']   = $comment->url;   }
+		if ( $user instanceof User && $user->id != 0 ) {
 			$params['author-logged-in'] = $user->loggedin ? 'true' : 'false';
 			// @todo test for administrator, editor, etc. as well
 			$params['author-trusted'] = $user->loggedin ? 'true' : 'false';
 			if ( $user->info->openid_url ) { $params['author-openid'] = $user->info->openid_url; }
 		}
 
+		// send document and check result
 		list( $errcode, $result ) = $this->defensio->postDocument( $params );
-		if ( $errcode != 200 || (string)$result->status != 'success' ) { // with async 'pending' is a valid option
-			//$msg = "Defensio error while getting extended stats: $errcode $stats->message";
-			//EventLog::log( $msg, 'warning', 'plugin', 'Defensio' );
-			//return $msg;
-		}
-
-		$comment->info->defensio_signature = (string)$result->signature;
-		// all empty while 'pending':
-		$comment->info->defensio_allow = (string)$result->allow == 'true';
-		$comment->info->defensio_classification = (string)$result->classification; // innocent, spam, and malicious
-		$comment->info->defensio_spaminess = (string)$result->spaminess * 1.0;
-		$comment->info->defensio_profanity_match = (string)$result->{'profanity-match'} == 'true';
-
-		// don't auto-delete logged-in users
-		if ( $user->loggedin ) { return $allow; }
-		
-		// see if it's spam or the spaminess is greater than min allowed spaminess
-		$min_spaminess_delete = Options::get( self::OPTION_DELETE_SPAMINESS );
-		if ( !$comment->info->defensio_allow && $comment->info->defensio_spaminess >= ((int) $min_spaminess_delete / 100) ) { return false; }
-
-		return $allow;
-	}
-
-	/**
-	 * Use the already computed Defensio data to determine if a comment is spam, unapproved, or approved.
-	 * @param Comment $comment The comment object to scan
-	 */
-	private function audit_comment( Comment $comment )
-	{
-		// see if it's spam or the spaminess is greater than min allowed spaminess
-		$min_spaminess_flag = Options::get( self::OPTION_FLAG_SPAMINESS );
-		if ( !$comment->info->defensio_allow && $comment->info->defensio_spaminess >= ((int) $min_spaminess_flag / 100) ) {
-			$comment->status = 'spam';
-			// this array nonsense is dumb
-			$comment->info->spamcheck = array_unique(
-				array_merge(
-					(array) $comment->info->spamcheck,
-					array( _t('Flagged as Spam by Defensio', 'defensio') )
-				)
-			);
+		$status = (string)$result->status;
+		if ( $errcode != 200 || ( $status != 'success' && $status != 'pending' ) ) {
+			$msg = "Defensio error while submitting comment: $errcode $result->message\nWill queue to try again.";
+			EventLog::log( $msg, 'warning', 'plugin', 'Defensio' );
+			$comment->status = self::COMMENT_STATUS_QUEUED;
+			self::append_spamcheck( _t('Queued for Defensio scan.', 'defensio') );
+			$comment->info->user_id = ($user instanceof User) ? $user->id : 0;
+			$comment->update();
 		}
 		else {
-			// it's not spam so if auto_approve is set, approve it
-			if ( Options::get( self::OPTION_AUTO_APPROVE ) ) {
-				$comment->status = 'approved';
+			$comment->info->defensio_signature = (string)$result->signature;
+			unset( $comment->info->user_id );
+			if ( $status == 'pending' ) {
+				$comment->status = self::COMMENT_STATUS_QUEUED;
+				$comment->update();
+			}
+			else { // $status == 'success'
+				$this->defensio_update_comment( $comment, $result );
+			}
+		}
+	}
+
+	/**
+	 * Update the comment info and its status using the given Defensio data.
+	 * @param Comment $comment The comment object to scan
+	 * @param SimpleXMLElement $data The Defensio data
+	 */
+	private function defensio_update_comment( Comment $comment, SimpleXMLElement $data )
+	{
+		// copy the Defensio data
+		$comment->info->defensio_allow           = $allow     =  (string)$data->allow == 'true';
+		$comment->info->defensio_classification  = $type      =  (string)$data->classification; // innocent, spam, and malicious
+		$comment->info->defensio_spaminess       = $spaminess = ((string)$data->spaminess) * 100.0;
+		$comment->info->defensio_profanity_match =               (string)$data->{'profanity-match'} == 'true';
+
+		// see if it's spam or the spaminess is greater than min allowed spaminess
+		$min_spaminess_flag = Options::get( self::OPTION_FLAG_SPAMINESS );
+		$min_spaminess_delete = Options::get( self::OPTION_DELETE_SPAMINESS );
+		if ( !$allow && $spaminess >= $min_spaminess_delete ) {
+			$comment->delete();
+		}
+		else {
+			if ( !$allow || $type != 'innocent' ) { self::append_spamcheck( $comment, _t('Defensio flagged as \'%s\'',                 array( $type ),      'defensio') ); }
+			if ( $spaminess > 0 )                 { self::append_spamcheck( $comment, _t('Defensio gave a spaminess rating of %.2f%%', array( $spaminess ), 'defensio') ); }
+
+			if ( !$allow && $spaminess >= $min_spaminess_flag ) {
+				$comment->status = 'spam';
 			}
 			else {
-				$comment->status = 'unapproved';
+				// it's not spam so if auto_approve is set, approve it
+				if ( Options::get( self::OPTION_AUTO_APPROVE ) ) {
+					$comment->status = 'approved';
+				}
+				else {
+					$comment->status = 'unapproved';
+				}
 			}
+			$comment->update();
 		}
-	}
-
-	/**
-	 * Hook in to scan the comment with Defensio. If it fails, add a cron to try again.
-	 * @param Comment $comment The comment object that was inserted
-	 */
-	public function action_comment_insert_before( Comment $comment )
-	{
-		//try {
-			$this->audit_comment( $comment );
-		/*}
-		catch ( Exception $e ) {
-			EventLog::log(
-				_t('Defensio scanning for comment %s failed, adding to queue', array($comment->ip), 'defensio'),
-				'notice', 'comment', 'Defensio'
-			);
-			$comment->status =  self::COMMENT_STATUS_QUEUED;
-			$comment->info->spamcheck = array( _t('Queued for Defensio scan.', 'defensio') );
-			// this could cause multiple crons without checking if there, but that's ok, it'll avoid races.
-			$this->_add_cron();
-			Session::notice( _t('Your comment is being scanned for spam.', 'defensio') );
-		}*/
 	}
 	
 	/**
-	 * I should really comment all these functions. --matt
+	 * Add spamcheck entries to a comment.
+	 * @param Comment $comment The comment to append spamcheck information to
+	 * @param mixed $text Either an array of strings or a single string to append to the spamcheck list
 	 */
-	/*protected function _add_cron( $time = 0 )
+	private static function append_spamcheck( Comment $comment, $text )
 	{
-		CronTab::add_single_cron(
-				'defensio_queue',
-				'defensio_queue',
-				time() + $time,
-				_t('Queued comments to scan with defensio, that failed first time', 'defensio')
-			);
-	}*/
+		if ( is_string($text) ) {
+			$text = array( $text );
+		}
+		if ( isset($comment->info->spamcheck) && is_array($comment->info->spamcheck) ) {
+			$comment->info->spamcheck = array_unique( array_merge( $comment->info->spamcheck, $text ) );
+		}
+		else {
+			$comment->info->spamcheck = $text;
+		}
+	}
 	
 	/**
-	 * try to scan for MAX_RETRIES
+	 * 
 	 */
-	/*public function filter_defensio_queue($result = true)
-	{
-		$comments = Comments::get( array('status' => self::COMMENT_STATUS_QUEUED) );
-		
-		if ( count($comments) > 0 ) {
-			$try_again = FALSE;
-			foreach( $comments as $comment ) {
-				// Have we tried yet
-				if ( !$comment->info->defensio_retries ) {
-					 $comment->info->defensio_retries = 1;
-				}
-				try {
-					$this->audit_comment( $comment );
-					$comment->update();
-					EventLog::log(
-						_t('Defensio scanning, retry %d, for comment %s succeded', array($comment->info->defensio_retries, $comment->ip), 'defensio'),
-						'notice', 'plugin', 'Defensio'
-					);
-				}
-				catch ( Exception $e ) {
-					if ( $comment->info->defensio_retries == self::MAX_RETRIES ) {
-						EventLog::log(
-							_t('Defensio scanning failed for comment %s. Could not connect to server. Marking unapproved.', array($comment->ip), 'defensio'),
-							'notice', 'plugin', 'Defensio'
-						);
-						$comment->status = 'unapproved';
-						$comment->update();
-					}
-					else {
-						EventLog::log(
-							_t('Defensio scanning, retry %d, for comment %s failed', array($comment->info->defensio_retries, $comment->ip), 'defensio'),
-							'notice', 'plugin', 'Defensio'
-						);
-						// increment retries and set try_again
-						$comment->info->defensio_retries = $comment->info->defensio_retries + 1;
-						$comment->update();
-						$try_again = TRUE;
-					}
-				}
-			}
-			// try again in RETRY_INTERVAL seconds if not scanned yet
-			if ( $try_again ) {
-				$this->_add_cron(self::RETRY_INTERVAL);
-			}
-		}
-		return true;
-	}*/
-
 	public function action_admin_moderate_comments( $action, Comments $comments, AdminHandler $handler )
 	{
-		$false_positives = 0;
-		$false_negatives = 0;
+		// only opperate when becoming spam or approved
+		if ( $action != 'spam' || $action != 'approve' ) { return; }
+		
+		$falses = 0;
+		$allowed = $action == 'approve';
 
+		// go through each comment and update it
 		foreach ( $comments as $comment ) {
-			switch ( $action ) {
-				case 'spam':
-					if ( isset($comment->info->defensio_allow) && $comment->info->defensio_allow ) {
-						list($errcode, $xml) = $this->defensio->putDocument( $comment->info->defensio_signature, array( 'allow' => 'false' ) );
-						if ( $errcode != 200 ) {
-							EventLog::log( "Failed to send updated allowed status of comment: $errcode $xml->message", 'warning', 'plugin', 'Defensio' );
-						}
-						else {
-							$comment->info->defensio_allow = false;
-							$false_negatives++;
-						}
-					}
-					break;
-				case 'approve':
-					if ( isset($comment->info->defensio_allow) && !$comment->info->defensio_allow ) {
-						list($errcode, $xml) = $this->defensio->putDocument( $comment->info->defensio_signature, array( 'allow' => 'true' ) );
-						if ( $errcode != 200 ) {
-							EventLog::log( "Failed to send updated allowed status of comment: $errcode $xml->message", 'warning', 'plugin', 'Defensio' );
-						}
-						else {
-							$comment->info->defensio_allow = true;
-							$false_positives++;
-						}
-					}
-					break;
+			if ( $this->defensio_update_status( $comment, $allowed ) ) {
+				$falses++;
 			}
 		}
 
-		if ( $false_positives > 0 || $false_negatives > 0 ) {
+		// report on what was done
+		if ( $falses > 0 ) {
 			Cache::expire('defensio_stats');
-			EventLog::log(_t('Reported %d false positive(s) and %d false negative(s) to Defensio', array($false_positives, $false_negatives), 'defensio'), 'info', 'plugin', 'Defensio');
+			Cache::expire('defensio_extended_stats');
+			$kind = $allowed ? 'positive' : 'negative';
+			$msg = sprintf( _n( "Reported %d false $kind to Defensio", "Reported %d false {$kind}s to Defensio", $falses, 'defensio' ), $falses );
+			EventLog::log( $msg, 'info', 'plugin', 'Defensio' );
+			Session::notice( $msg );
 		}
 	}
+	
+	/**
+	 * Update the status of a comment with Defensio.
+	 * @param Comment $comment The comment being updated
+	 * @param bool $allowed If the new comment status is allowed (approved) or not (spam); the status unapproved should not be given
+	 * @return bool If the Defensio status was updated and should be counted
+	 */
+	private function defensio_update_status( Comment $comment, $allowed )
+	{
+		if ( self::comment_age( $comment ) > self::MAX_COMMENT_DAYS ) {
+			// too old
+		}
+		else if ( isset($comment->info->defensio_signature) ) {
+			// ready or pending
+			$ready = isset($comment->info->defensio_allow);
+			if ( $ready && $comment->info->defensio_allow != $allowed || !$ready ) {
+				// send update to Defensio
+				list($errcode, $result) = $this->defensio->putDocument( $comment->info->defensio_signature, array( 'allow' => $allowed ? 'true' : 'false' ) );
+				$status = (string)$result->status;
+				if ( $errcode != 200 || ( $status != 'success' && $status != 'pending' ) ) {
+					EventLog::log( "Failed to send updated status of comment: $errcode $result->message", 'warning', 'plugin', 'Defensio' );
+				}
+				else if ( $status != 'pending' ) {
+					// update Defensio information
+					$comment->info->defensio_allow          = (string)$result->allowed == 'true';
+					$comment->info->defensio_classification = (string)$result->classification;
+					return true;
+				}
+			}
+		}
+		else if ( $comment->status == self::COMMENT_STATUS_QUEUED ) {
+			// never submitted
+			//@todo
+		}
+		else {
+			// not a Defensio comment
+		}
+		return false;
+	}
+	
+	/**
+	 * Gets the age of a comment in days.
+	 * @param Comment $comment The comment to check
+	 * @return int The number of days ago the comment was posted
+	 */
+	private static function comment_age( Comment $comment )
+	{
+		return intval((HabariDateTime::date_create('now')->int - $comment->date->int) / 86400);
+	}
+	
+	
+	////////// Announce Published Posts //////////
 
-	public function announce_post( Post $post )
+	// @todo work out some details here (insert_after, update_after, status_published ? )
+	public function action_post_insert_after( Post $post ) { $this->announce_post($post); }
+	public function action_post_update_after( Post $post ) { $this->announce_post($post); }
+
+	/**
+	 * Announces a post to Defensio, only if the user has enabled that optiona and the status is published.
+	 * @param Post $post The post to announce.
+	 */
+	private function announce_post( Post $post )
 	{
 		if ( Options::get( self::OPTION_ANNOUNCE_POSTS ) && $post->status == Post::status( 'published' ) ) {
+			// setup data to post
 			$params = array(
 				'platform' => 'habari',
 				'type' => 'article',
@@ -580,6 +666,7 @@ class Defensio extends Plugin
 			);
 			if ( $post->author->openid_url ) { $params['author-openid'] = $post->author->openid_url; }
 			
+			// submit
 			list( $errcode, $result ) = $this->defensio->postDocument( $params );
 			if ( $errcode != 200 || $result->status != 'success' ) {
 				$msg = "Defensio error while announcing post: $errcode $result->message";
@@ -587,15 +674,25 @@ class Defensio extends Plugin
 			}
 		}
 	}
-	public function action_post_insert_after( Post $post ) { $this->announce_post($post); }
-	public function action_post_update_after( Post $post ) { $this->announce_post($post); }
 	
+	
+	////////// Commment Display //////////
+	/**
+	 * Add the 'defensio queue' comment status.
+	 * @param array $comment_status_list The list of comment statuses
+	 * @return array The list of comment statuses, with 'defensio queue' added
+	 */
 	public function filter_list_comment_statuses( array $comment_status_list )
 	{
 		$comment_status_list[self::COMMENT_STATUS_QUEUED] = 'defensio queue';
 		return $comment_status_list;
 	}
 	
+	/**
+	 * Gets the style for a comment entry for admin view based on its spaminess and queued status.
+	 * @param Comment $comment The comment to get the style for
+	 * @return string The comment entry style
+	 */
 	public static function get_spaminess_style( Comment $comment )
 	{
 		if ( isset($comment->info->defensio_spaminess) && $comment->status == Comment::status('spam') ) {
@@ -609,18 +706,24 @@ class Defensio extends Plugin
 						$grad_hex,
 						ColorUtils::hex_rgb($start_hex),
 						ColorUtils::hex_rgb($end_hex),
-						array_pad(array(), 3, $comment->info->defensio_spaminess)
+						array_fill(0, 3, $comment->info->defensio_spaminess / 100.0)
 					)
 				)
 			);
 			return "border-left-color:#$border; border-right-color:#$border;";
 		}
-		elseif ( $comment->status == self::COMMENT_STATUS_QUEUED ) {
+		else if ( $comment->status == self::COMMENT_STATUS_QUEUED ) {
 			return 'border-left: 3px solid #BCCFFF; border-right: 3px solid #BCCFFF;';
 		}
 		return '';
 	}
 	
+	/**
+	 * Adds the Defensio style to a comment when view in admin.
+	 * @param string $style The current style of the comment
+	 * @param Comment $comment The comment to get modify the style for
+	 * @return string The style of the comment, augmented for spaminees and queued status
+	 */
 	public function filter_comment_style( $style, Comment $comment )
 	{
 		if ( $style != '' ) {
@@ -630,10 +733,14 @@ class Defensio extends Plugin
 		return $style;
 	}
 	
+	/**
+	 * Adds a spaminess label to to comments when view in admin. This is echoed directly.
+	 * @param Comment $comment The comment to display the label for
+	 */
 	public function action_comment_info( Comment $comment )
 	{
 		if ( isset($comment->info->defensio_spaminess) ) {
-			echo '<p class="keyval spam"><span class="label">' . _t('Defensio Spaminess:', 'defensio') . '</span>' . '<strong>' . ($comment->info->defensio_spaminess*100) . '%</strong></p>';
+			echo '<p class="keyval spam"><span class="label">' . _t('Defensio Spaminess:', 'defensio') . '</span>' . '<strong>' . ($comment->info->defensio_spaminess) . '%</strong></p>';
 		}
 	}
 	
@@ -665,7 +772,7 @@ class Defensio extends Plugin
 			return 0;
 		}
 		else {
-			return 1;
+			return 100;
 		}
 	}
 }
