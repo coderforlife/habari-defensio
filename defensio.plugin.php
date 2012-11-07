@@ -239,7 +239,7 @@ class Defensio extends Plugin
 	{
 		$block->link = URL::get('admin', array('page' => 'comments'));
 
-		$stats = $this->defensio_stats();
+		$stats = $this->defensio_recent_extended_stats();
 		// show an error in the dashboard if Defensio returns a bad response.
 		if ( is_string($stats) ) { $block->error_msg = $stats; return; }
 
