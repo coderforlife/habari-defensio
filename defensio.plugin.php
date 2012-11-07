@@ -96,7 +96,7 @@ class Defensio extends Plugin
 			);
 		$api_key->add_validator( 'validate_required' );
 		$api_key->add_validator( array( $this, 'validate_api_key' ) );
-		$register = $ui->append( 'static', 'register', '<div style="margin-left:10px"><a href="http://defensio.com/signup" target="_blank">' . _t('Get a new Defensio API key.', 'defensio') . '</a></div>' );
+		$register = $ui->append( 'static', 'register', '<div><label><a href="http://defensio.com/signup" target="_blank">' . _t('Get a new Defensio API key.', 'defensio') . '</a></label></div><hr>' );
 
 		// min spaminess flag
 		$spaminess_flag = $ui->append(
@@ -117,7 +117,7 @@ class Defensio extends Plugin
 			);
 		$spaminess_delete->options = $spaminess_opts;
 		$spaminess_delete->add_validator( 'validate_required' );
-		$register = $ui->append( 'static', 'extra', '<div style="margin-left:10px">' . _t('* If and only if Defensio also flags the comment as spam. See (?) for more information.', 'defensio') . '</div>' );
+		$register = $ui->append( 'static', 'extra', '<div><label>' . _t('* If and only if Defensio also flags the comment as spam. See (?) for more information.', 'defensio') . '</label></div><hr>' );
 
 
 		// checkboxes
