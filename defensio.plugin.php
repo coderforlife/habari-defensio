@@ -132,7 +132,6 @@ class Defensio extends Plugin
 		$this->defensio = new DefensioAPI( Options::get( self::OPTION_API_KEY ), self::DEFENSIO_CLIENT_ID );
 		$this->load_text_domain( 'defensio' );
 		$this->add_template( 'dashboard.block.defensio', __DIR__ . '/dashboard.block.defensio.php' );
-		$this->add_template( 'dashboard.block.defensio_extended', __DIR__ . '/dashboard.block.defensio_extended.php' );
 	}
 
 	/**
@@ -267,7 +266,6 @@ class Defensio extends Plugin
 	{
 		if (User::identify()->can('manage_all_comments')) {
 			$block_list['defensio'] = _t( 'Defensio', 'defensio' );
-			$block_list['defensio_extended'] = _t( 'Defensio Extended', 'defensio_extended' );
 		}
 		return $block_list;
 	}
@@ -280,7 +278,6 @@ class Defensio extends Plugin
 	public function filter_dashboard_block_list( $block_list )
 	{
 		$block_list['defensio'] = _t( 'Defensio', 'defensio' );
-		$block_list['defensio_extended'] = _t( 'Defensio Extended', 'defensio_extended' );
 		return $block_list;
 	}
 	
@@ -297,10 +294,15 @@ class Defensio extends Plugin
 		if ( !isset($block->display) || $block->display == 'basic' ) {
 			$extended = false;
 			$display = 'basic';
+			$block->title = 'Defensio';
 		}
 		else {
 			$extended = true;
 			$display = $block->display;
+			$titles = array(
+				'recent_accuracy_plot' => 'Recent Accuracy'
+			);
+			$block->title = 'Defensio: '.$titles[$display];
 		}
 
 		$stats = $extended ? $this->defensio_recent_extended_stats() : $this->defensio_stats();
@@ -351,41 +353,11 @@ class Defensio extends Plugin
 	public function action_block_form_defensio( FormUI $form, $block )
 	{
 		$display = $form->append( 'select', 'display', $block, _t('Display', 'defensio') );
-		$display->options = array( 'basic' => 'Basic', 'recent_accuracy_plot' => 'Recent Accuracy Plot' );
-		$form->append( 'submit', 'submit', _t('Submit') );
-	}
-
-	/**
-	 * Produce the content for the Defensio Extended block
-	 * @param Block $block The block object
-	 * @param Theme $theme The theme that the block will be output with
-	 */
-	public function action_block_content_defensio_extended( $block, Theme $theme )
-	{
-		$block->link = URL::get('admin', array('page' => 'comments'));
-
-		$stats = $this->defensio_recent_extended_stats();
-		// show an error in the dashboard if Defensio returns a bad response.
-		if ( is_string($stats) ) { $block->error_msg = $stats; return; }
-
-		$block->error_msg = null;
-		$block->charts = array(
-			'recent-accuracy'  => (string)$stats->{'chart-urls'}->{'recent-accuracy' },
-			'total-unwanted'   => (string)$stats->{'chart-urls'}->{'total-unwanted'  },
-			'total-legitimate' => (string)$stats->{'chart-urls'}->{'total-legitimate'},
+		$display->options = array(
+			'basic' => 'Basic',
+			'recent_accuracy_plot' => 'Recent Accuracy Plot'
 		);
-		
-		$data = array();
-		foreach ($stats->data->datum as $datum) {
-			$data[] = array(
-				'date'            =>  (string)$datum->date, // Y-m-d
-				'accuracy'        => ((string)$datum->accuracy) * 100.0,
-				'unwanted'        => ((string)$datum->unwanted) * 1,
-				'legitimate'      => ((string)$datum->legitimate) * 1,
-				'false-positives' => ((string)$datum->{'false-positives'}) * 1,
-				'false-negatives' => ((string)$datum->{'false-negatives'}) * 1,
-			);
-		}
+		$form->append( 'submit', 'submit', _t('Submit') );
 	}
 	
 	/**
