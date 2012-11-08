@@ -288,9 +288,6 @@ class Defensio extends Plugin
 	 */
 	public function action_block_content_defensio( $block, Theme $theme )
 	{
-		$block->link = URL::get('admin', array('page' => 'comments'));
-		$block->has_options = true;
-
 		if ( !isset($block->display) || $block->display == 'basic' ) {
 			$extended = false;
 			$display = 'basic';
@@ -343,6 +340,9 @@ class Defensio extends Plugin
 			$block->learning        =  (string)$stats->learning == 'true';
 			$block->learning_status =  (string)$stats->{'learning-status'};
 		}
+
+		$block->link = URL::get('admin', array('page' => 'comments'));
+		$block->has_options = true;
 	}
 
 	/**
