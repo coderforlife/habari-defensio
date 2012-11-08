@@ -651,7 +651,7 @@ class Defensio extends Plugin
 		if ( is_string($result) ) {
 			// Will queue to try again?
 			$comment->status = self::COMMENT_STATUS_QUEUED;
-			self::append_spamcheck( _t('Queued for Defensio scan.', 'defensio') );
+			self::append_spamcheck( $comment, _t('Queued for Defensio scan.', 'defensio') );
 			$comment->info->user_id = ($user instanceof User) ? $user->id : 0;
 			$comment->update();
 		}
@@ -659,7 +659,7 @@ class Defensio extends Plugin
 			$comment->info->defensio_signature = (string)$result->signature;
 			unset( $comment->info->user_id );
 			if ( (string)$result->status == 'pending' ) {
-				self::append_spamcheck( _t('Queued for Defensio pending scan results.', 'defensio') );
+				self::append_spamcheck( $comment, _t('Queued for Defensio pending scan results.', 'defensio') );
 				$comment->status = self::COMMENT_STATUS_QUEUED;
 				$comment->update();
 			}
