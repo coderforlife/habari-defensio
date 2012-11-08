@@ -283,7 +283,7 @@ class Defensio extends Plugin
 		$block_list['defensio_extended'] = _t( 'Defensio Extended', 'defensio_extended' );
 		return $block_list;
 	}
-
+	
 	/**
 	 * Produce the content for the Defensio block
 	 * @param Block $block The block object
@@ -350,7 +350,7 @@ class Defensio extends Plugin
 	 */
 	public function action_block_form_defensio( FormUI $form, $block )
 	{
-		$display = $from->append( 'select', 'display', $block, _t('Display', 'defensio') );
+		$display = $form->append( 'select', 'display', $block, _t('Display', 'defensio') );
 		$display->options = array( 'basic' => 'Basic', 'recent_accuracy_plot' => 'Recent Accuracy Plot' );
 		$form->append( 'submit', 'submit', _t('Submit') );
 	}
