@@ -515,7 +515,6 @@ class Defensio extends Plugin
 					}
 					else {
 						// else still pending
-						EventLog::log( 'Defensio Queue: Document still pending', 'debug', 'plugin', 'Defensio' );
 					}
 				}
 
@@ -523,7 +522,6 @@ class Defensio extends Plugin
 			else {
 				
 				// resubmit failed attempt
-				EventLog::log( 'Defensio Queue: Retrying failed attempt', 'debug', 'plugin', 'Defensio' );
 				$this->defensio_post_comment( $comment, User::get_by_id($comment->info->user_id) );
 				
 			}
@@ -565,10 +563,10 @@ class Defensio extends Plugin
 			$result = $this->get_defensio_xml( 'handlePostDocumentAsyncCallback', 'in callback' );
 			if ( !is_string($result) ) {
 				if ( !isset($comment->info->defensio_signature) || $comment->info->defensio_signature != (string)$result->signature ) {
-					EventLog::log( _t('Defensio signature (%s) and comment ID (%d) do not correspond', array( (string)$result->signature, $id )), 'warning', 'plugin', 'Defensio' );
+					EventLog::log( _t( 'Defensio signature (%s) and comment ID (%d) do not correspond', array( (string)$result->signature, $id ), 'defensio' ), 'warning', 'plugin', 'Defensio' );
 				}
 				else {
-					EventLog::log( _t('Defensio callback is running!'), 'info', 'plugin', 'Defensio' );
+					EventLog::log( _t( 'Defensio callback is running!', 'defensio' ), 'info', 'plugin', 'Defensio' );
 					$this->defensio_update_comment( $comment, $result );
 				}
 			}
@@ -661,13 +659,11 @@ class Defensio extends Plugin
 			$comment->info->defensio_signature = (string)$result->signature;
 			unset( $comment->info->user_id );
 			if ( (string)$result->status == 'pending' ) {
-				EventLog::log( _t('Comment posted, now pending', 'defensio'), 'debug', 'plugin', 'Defensio' );
 				self::append_spamcheck( _t('Queued for Defensio pending scan results.', 'defensio') );
 				$comment->status = self::COMMENT_STATUS_QUEUED;
 				$comment->update();
 			}
 			else { // $result->status == 'success'
-				EventLog::log( _t('Comment posted, success', 'defensio'), 'debug', 'plugin', 'Defensio' );
 				$this->defensio_update_comment( $comment, $result );
 			}
 		}
