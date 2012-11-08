@@ -566,7 +566,7 @@ class Defensio extends Plugin
 					EventLog::log( _t( 'Defensio signature (%s) and comment ID (%d) do not correspond', array( (string)$result->signature, $id ), 'defensio' ), 'warning', 'plugin', 'Defensio' );
 				}
 				else {
-					EventLog::log( _t( 'Defensio callback is running!', 'defensio' ), 'info', 'plugin', 'Defensio' );
+					EventLog::log( _t( 'Defensio callback is running', 'defensio' ), 'debug', 'plugin', 'Defensio' );
 					$this->defensio_update_comment( $comment, $result );
 				}
 			}
@@ -649,7 +649,8 @@ class Defensio extends Plugin
 		// send document and check result
 		$result = $this->get_defensio_xml( 'postDocument', 'postting comment', array( $params ), array( 'success', 'pending' ) );
 		if ( is_string($result) ) {
-			// Will queue to try again?
+			// will queue to try again?
+			EventLog::log( _t( 'Defensio failed - will retry', 'defensio' ), 'debug', 'plugin', 'Defensio' );
 			$comment->status = self::COMMENT_STATUS_QUEUED;
 			self::append_spamcheck( $comment, _t('Queued for Defensio scan.', 'defensio') );
 			$comment->info->user_id = ($user instanceof User) ? $user->id : 0;
@@ -686,6 +687,7 @@ class Defensio extends Plugin
 		$min_spaminess_flag = Options::get( self::OPTION_FLAG_SPAMINESS );
 		$min_spaminess_delete = Options::get( self::OPTION_DELETE_SPAMINESS );
 		if ( !$allow && $spaminess >= $min_spaminess_delete ) {
+			EventLog::log( _t( 'Auto-deleting comment', 'defensio' ), 'debug', 'plugin', 'Defensio' );
 			$comment->delete();
 		}
 		else {
