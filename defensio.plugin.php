@@ -24,6 +24,11 @@ class Defensio extends Plugin
 
 	private $defensio;
 	
+	/**
+	 * Handle an Exception raised by the Defensio API functions. This will log a warning message and return it.
+	 * @param Exception $ex The exception that was raised
+	 * @return string The message written to the log
+	 */
 	private function handle_defensio_exception( Exception $ex )
 	{
 		if ( $ex instanceof DefensioConnectionTimeout ) {
@@ -45,15 +50,18 @@ class Defensio extends Plugin
 		return $msg;
 	}
 	
-	private function get_defensio_xml( $func, $desc, array $params = null, array $allowed_statuses = array('success') )
+	/**
+	 * Get the XML response from a Defensio API function.
+	 * @param string $func The name of the Defensio API function
+	 * @param string $desc What this function does (fills in the sentence "while ...")
+	 * @param array $params The parameters to pass to the function, default no paremeters (empty array)
+	 * @param array $allowed_statuses The statuses that are allowed as "successful" (default is just 'success', some functions will need 'pending' as well)
+	 * @return mixed If there is a problem then a string with the error message is returned, otherwise the SimpleXMLElement object with the response.
+	 */
+	private function get_defensio_xml( $func, $desc, array $params = array(), array $allowed_statuses = array('success') )
 	{
 		try {
-			if ( is_null($params) ) {
-				list( $http_status, $xml ) = $this->defensio->$func();
-			}
-			else {
-				list( $http_status, $xml ) = call_user_func_array( array( $this->defensio, $func ), $params );
-			}
+			list( $http_status, $xml ) = call_user_func_array( array( $this->defensio, $func ), $params );
 			if ( $http_status != 200 || !in_array( (string)$xml->status, $allowed_statuses ) ) {
 				$msg = _t("<b>Defensio Error while $desc:</b> %d %s %s", array($http_status, $xml->status, $xml->message), 'defensio');
 				EventLog::log( $msg, 'warning', 'plugin', 'Defensio' );
@@ -108,7 +116,7 @@ class Defensio extends Plugin
 	}
 
 	/**
-	 * Stop Defensio Queue.
+	 * Stop Defensio Queue upon deactivation.
 	 */
 	function action_plugin_deactivation()
 	{
@@ -284,20 +292,67 @@ class Defensio extends Plugin
 	public function action_block_content_defensio( $block, Theme $theme )
 	{
 		$block->link = URL::get('admin', array('page' => 'comments'));
+		$block->has_options = true;
 
-		$stats = $this->defensio_stats();
+		if ( !isset($block->display) || $block->display == 'basic' ) {
+			$extended = false;
+			$display = 'basic';
+		}
+		else {
+			$extended = true;
+			$display = $block->display;
+		}
+
+		$stats = $extended ? $this->defensio_recent_extended_stats() : $this->defensio_stats();
 		// show an error in the dashboard if Defensio returns a bad response.
 		if ( is_string($stats) ) { $block->error_msg = $stats; return; }
 
 		$block->error_msg = null;
-		$block->accuracy        = ((string)$stats->accuracy) * 100.0;
-		$block->spam            = ((string)$stats->unwanted->spam) * 1;
-		$block->malicious       = ((string)$stats->unwanted->malicious) * 1;
-		$block->legitimate      = ((string)$stats->legitimate->total) * 1;
-		$block->false_negatives = ((string)$stats->{'false-negatives'}) * 1;
-		$block->false_positives = ((string)$stats->{'false-positives'}) * 1;
-		$block->learning        =  (string)$stats->learning == 'true';
-		$block->learning_status =  (string)$stats->{'learning-status'};
+		$block->extended = $extended;
+		$block->display = $display;
+		
+		if ( $extended ) {
+			$charts = array();
+			foreach ($stats->{'chart-urls'}->children() as $chart_url) {
+				$charts[$chart_url->getName()] = (string)$chart_url;
+			}
+			$block->charts = $charts;
+			
+			$data = array();
+			foreach ($stats->data->datum as $datum) {
+				$data[] = array(
+					'date'            =>  (string)$datum->date, // Y-m-d
+					'accuracy'        => ((string)$datum->accuracy) * 100.0,
+					'unwanted'        => ((string)$datum->unwanted) * 1,
+					'legitimate'      => ((string)$datum->legitimate) * 1,
+					'false-positives' => ((string)$datum->{'false-positives'}) * 1,
+					'false-negatives' => ((string)$datum->{'false-negatives'}) * 1,
+				);
+			}
+			$block->data = $data;
+		}
+		else {
+			$block->accuracy        = ((string)$stats->accuracy) * 100.0;
+			$block->spam            = ((string)$stats->unwanted->spam) * 1;
+			$block->malicious       = ((string)$stats->unwanted->malicious) * 1;
+			$block->legitimate      = ((string)$stats->legitimate->total) * 1;
+			$block->false_negatives = ((string)$stats->{'false-negatives'}) * 1;
+			$block->false_positives = ((string)$stats->{'false-positives'}) * 1;
+			$block->learning        =  (string)$stats->learning == 'true';
+			$block->learning_status =  (string)$stats->{'learning-status'};
+		}
+	}
+
+	/**
+	 * The options panel for the Defensio block.
+	 * @param FormUI $form The form that will set the options
+	 * @param Block $block The block that we set the options for
+	 */
+	public function action_block_form_defensio( FormUI $form, $block )
+	{
+		$display = $from->append( 'select', 'display', $block, _t('Display', 'defensio') );
+		$display->options = array( 'basic' => 'Basic', 'recent_accuracy_plot' => 'Recent Accuracy Plot' );
+		$form->append( 'submit', 'submit', _t('Submit') );
 	}
 
 	/**
@@ -331,14 +386,6 @@ class Defensio extends Plugin
 				'false-negatives' => ((string)$datum->{'false-negatives'}) * 1,
 			);
 		}
-		
-		// to get arrays of each field:
-		// $date            = array_map(create_function('$x', 'return $x[\'date\'];'           ), $data);
-		// $accuracy        = array_map(create_function('$x', 'return $x[\'accuracy\'];'       ), $data);
-		// $unwanted        = array_map(create_function('$x', 'return $x[\'unwanted\'];'       ), $data);
-		// $legitimate      = array_map(create_function('$x', 'return $x[\'legitimate\'];'     ), $data);
-		// $false_positives = array_map(create_function('$x', 'return $x[\'false-positives\'];'), $data);
-		// $false_negatives = array_map(create_function('$x', 'return $x[\'false-negatives\'];'), $data);
 	}
 	
 	/**
