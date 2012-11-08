@@ -543,7 +543,7 @@ class Defensio extends Plugin
 			'action'=>'defensio_callback',
 			'priority'=>6,
 			'parse_regex'=>'%^defensio_callback~' . $myid . '~(?P<comment_id>[0-9]+)/?$%i',
-			'build_str'=>'defensio_callback~' . $myid . '~{$comment_id}',
+			'build_str'=>'defensio_callback~' . $myid . '~{$comment_id}/',
 		));
 		return $rules;
 	}
