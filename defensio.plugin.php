@@ -791,6 +791,7 @@ class Defensio extends Plugin
 				$result = $this->get_defensio_xml( 'putDocument', 'updatint status of comment', array( $comment->info->defensio_signature, array( 'allow' => $allowed ? 'true' : 'false' ) ), array( 'success', 'pending' ) );
 				if ( !is_string($result) && (string)$result->status != 'pending' ) {
 					// update Defensio information
+					EventLog::log( _t( 'Updated Defensio status of comment', 'defensio' ), 'debug', 'plugin', 'Defensio' );
 					$comment->info->defensio_allow          = (string)$result->allowed == 'true';
 					$comment->info->defensio_classification = (string)$result->classification;
 					return true;
