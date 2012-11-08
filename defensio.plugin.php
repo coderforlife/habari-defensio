@@ -331,7 +331,7 @@ class Defensio extends Plugin
 					'false-negatives' => ((string)$datum->{'false-negatives'}) * 1,
 				);
 			}
-			$block->data = $data;
+			$block->chart_data = $data;
 		}
 		else {
 			$block->accuracy        = ((string)$stats->accuracy) * 100.0;

@@ -18,7 +18,7 @@ else if ( $content->extended ) {
 		echo 'data.addColumn("number","Accuracy");';
 		echo 'data.addRows([';
 		$use_min_95 = true;
-		foreach ( $content->data as $row ) {
+		foreach ( $content->chart_data as $row ) {
 			$date = explode( '-', $row['date'] );
 			if ( $row['accuracy'] < 95.0 ) { $use_min_95 = false; }
 			echo "[new Date($date[0]," . ( $date[1]-1) . ",{$date[2]})," . round($row['accuracy']/100.0,3) . '],';
