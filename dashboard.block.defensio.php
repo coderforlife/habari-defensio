@@ -27,7 +27,7 @@ else if ( $content->extended ) {
 ?>
 new google.visualization.NumberFormat({pattern:"##0.0%"}).format(data,1);
 options.series=[{color:"black",visibleInLegend:false}];
-options.hAxis:{format:"MMM-dd"};options.vAxis:{<?php echo $use_min_95 ? 'minValue:0.95,' : ''; ?>maxValue:1,format:"##0.0%"};
+options.hAxis={format:"MMM-dd"};options.vAxis={<?php echo $use_min_95 ? 'minValue:0.95,' : ''; ?>maxValue:1,format:"##0.0%"};
 <?php
 	}
 ?>
