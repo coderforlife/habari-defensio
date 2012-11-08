@@ -4,7 +4,6 @@ require_once __DIR__ . '/Defensio.php';
 
 /**
  * @package Defensio
- * @todo add speicific comment ID to EventLog::log()s
  */
 class Defensio extends Plugin
 {
@@ -24,19 +23,49 @@ class Defensio extends Plugin
 	const OPTION_PROFANITY_FILTER_CONTENT = 'defensio__profanity_filter_content';
 
 	private $defensio;
-
-	/**
-	 * Generates a random ID that is 32 hex characters long (representing 16 bytes or 128 bits).
-	 * @return string 32 character hex string
-	 */
-	private static function rand_id()
+	
+	private function handle_defensio_exception( Exception $ex )
 	{
-		$id = '';
-		for ($i = 0; $i < 8; $i++) {
-			$id .= str_pad(dechex(mt_rand(0x0000, 0xFFFF)), 4, 0, STR_PAD_LEFT);
+		if ( $ex instanceof DefensioConnectionTimeout ) {
+			$msg = $ex->getMesasge() ?
+				_t('Connection timed out', 'defensio') . ":\n" . $ex->getMesasge() . "\n$ex->error_code: $ex->error_string" :
+				_t('Connection timed out', 'defensio');
 		}
-		return $id;
+		else if ( $ex instanceof DefensioConnectionError ) {
+			$msg = _t('Connection error', 'defensio') . ":\n" . $ex->getMesasge() . "\n$ex->error_code: $ex->error_string";
+		}
+		else if ( $ex instanceof DefensioEmptyCallbackData ) {
+			$msg = _t('Defensio callback data was empty');
+		}
+		// Use the just the given message for DefensioInvalidKey, DefensioUnexpectedHTTPStatus, DefensioFail
+		else {
+			$msg = $ex->getMesasge();
+		}
+		EventLog::log( $msg , 'warning', 'plugin', 'Defensio' );
+		return $msg;
 	}
+	
+	private function get_defensio_xml( $func, $desc, array $params = null, array $allowed_statuses = array('success') )
+	{
+		try {
+			if ( is_null($params) ) {
+				list( $http_status, $xml ) = $this->defensio->$func();
+			}
+			else {
+				list( $http_status, $xml ) = call_user_func_array( array( $this->defensio, $func ), $params );
+			}
+			if ( $http_status != 200 || !in_array( (string)$xml->status, $allowed_statuses ) ) {
+				$msg = _t("<b>Defensio Error while $desc:</b> %d %s %s", array($http_status, $xml->status, $xml->message), 'defensio');
+				EventLog::log( $msg, 'warning', 'plugin', 'Defensio' );
+				return $msg;
+			}
+			return $xml;
+		}
+		catch ( Exception $ex ) {
+			return _t('<b>Defensio Server Error:</b> %s', array( $this->handle_defensio_exception( $ex ) ), 'defensio');
+		}
+	}
+	
 
 	////////// Basic Setup and Initialization //////////
 
@@ -98,6 +127,19 @@ class Defensio extends Plugin
 		$this->add_template( 'dashboard.block.defensio_extended', __DIR__ . '/dashboard.block.defensio_extended.php' );
 	}
 
+	/**
+	 * Generates a random ID that is 32 hex characters long (representing 16 bytes or 128 bits).
+	 * @return string 32 character hex string
+	 */
+	private static function rand_id()
+	{
+		$id = '';
+		for ($i = 0; $i < 8; $i++) {
+			$id .= str_pad(dechex(mt_rand(0x0000, 0xFFFF)), 4, 0, STR_PAD_LEFT);
+		}
+		return $id;
+	}
+	
 
 	////////// Configuration //////////
 
@@ -190,12 +232,19 @@ class Defensio extends Plugin
 	{
 		$host = self::trim_hostname( Site::get_url( 'hostname' ) );
 		$defensio = new DefensioAPI( $key, self::DEFENSIO_CLIENT_ID );
-		list( $errcode, $xml ) = $defensio->getUser();
-		if ( $errcode == 200 && $xml->status == 'success' ) {
-			return self::trim_hostname( $xml->{'owner-url'} ) == $host ? array() :
-				array(_t('Sorry, the Defensio API key <b>%s</b> is not registered for this site (%s).', array( $key, $host ), 'defensio'));
+		try {
+			list( $http_status, $xml ) = $defensio->getUser();
+			if ( $http_status == 200 && (string)$xml->status == 'success' ) {
+				return self::trim_hostname( $xml->{'owner-url'} ) == $host ? array() :
+					array(_t('Sorry, the Defensio API key <b>%s</b> is not registered for this site (%s).', array( $key, $host ), 'defensio'));
+			}
+			else { // $http_status == 404 or status is 'failed'
+				return array(_t('Sorry, the Defensio API key <b>%s</b> is invalid. Please check to make sure the key is entered correctly. Defensio said: "%s"', array( $key, $xml->message ), 'defensio'));
+			}
 		}
-		return array(_t('Sorry, the Defensio API key <b>%s</b> is invalid. Please check to make sure the key is entered correctly. Defensio said: "%s"', array( $key, $xml->message ), 'defensio'));
+		catch ( Exception $ex ) {
+			return array(_t('<b>Defensio Server Error:</b> %s', array($this->handle_defensio_exception($ex)), 'defensio'));
+		}
 	}
 	
 	
@@ -302,15 +351,11 @@ class Defensio extends Plugin
 			$stats = simplexml_load_string( Cache::get( 'defensio_stats' ) );
 		}
 		else {
-			list( $errcode, $stats ) = $this->defensio->getBasicStats();
-			if ( $errcode != 200 || (string)$stats->status != 'success' ) {
-				$msg = "Defensio error while getting stats: $errcode $stats->status $stats->message";
-				EventLog::log( $msg, 'warning', 'plugin', 'Defensio' );
-				return $msg;
+			$stats = $this->get_defensio_xml( 'getBasicStats', 'getting stats' );
+			if ( !is_string($stats) ) {
+				Cache::set( 'defensio_stats', $stats->asXML() );
 			}
-			Cache::set( 'defensio_stats', $stats->asXML() );
 		}
-
 		return $stats;
 	}
 
@@ -333,14 +378,7 @@ class Defensio extends Plugin
 		$to = max( min( $to, time() ), $from );
 		$to = date( 'Y-m-d', $to );
 		
-		list( $errcode, $stats ) = $this->defensio->getExtendedStats(array( 'from' => $from, 'to' => $to ));
-		if ( $errcode != 200 || (string)$stats->status != 'success' ) {
-			$msg = "Defensio error while getting extended stats: $errcode $stats->status $stats->message";
-			EventLog::log( $msg, 'warning', 'plugin', 'Defensio' );
-			return $msg;
-		}
-
-		return $stats;
+		return $this->get_defensio_xml( 'getExtendedStats', 'getting extended stats', array( array( 'from' => $from, 'to' => $to ) ) );
 	}
 
 	/**
@@ -355,12 +393,10 @@ class Defensio extends Plugin
 		}
 		else {
 			$stats = $this->defensio_extended_stats( strtotime('-30 days'), time() );
-			if ( is_string($stats) ) {
-				return $stats;
+			if ( !is_string($stats) ) {
+				Cache::set( 'defensio_extended_stats', $stats->asXML() );
 			}
-			Cache::set( 'defensio_extended_stats', $stats->asXML() );
 		}
-		
 		return $stats;
 	}
 	
@@ -426,10 +462,8 @@ class Defensio extends Plugin
 		}
 		
 		// send data
-		list( $errcode, $filtered ) = $this->defensio->postProfanityFilter( $in );
-		if ( $errcode != 200 || (string)$filtered->status != 'success' ) {
-			$msg = "Defensio error while running profanity filter: $errcode $filtered->status $filtered->message";
-			EventLog::log( $msg, 'warning', 'plugin', 'Defensio' );
+		$filtered = $this->get_defensio_xml( 'postProfanityFilter', 'getting extended stats', array( $in ) );
+		if ( is_string($filtered) ) {
 			return $data;
 		}
 		
@@ -469,26 +503,22 @@ class Defensio extends Plugin
 		$comments = Comments::get( array('status' => self::COMMENT_STATUS_QUEUED) );
 		foreach( $comments as $comment ) {
 			if ( self::comment_age( $comment ) > self::MAX_COMMENT_DAYS ) {
-				$msg = "Defensio comment submission was pending or failed for 30 days. Will not try again.";
-				EventLog::log( $msg, 'warning', 'plugin', 'Defensio' );
+				EventLog::log( _t( 'Defensio comment submission was pending or failed for 30 days. Will not try again.', 'defensio' ), 'warning', 'plugin', 'Defensio' );
 			}
 			else if ( isset($comment->info->defensio_signature) ) {
 				
 				// check pending asynchronous result
-				list( $errcode, $result ) = $this->defensio->getDocument( $comment->info->defensio_signature );
-				$status = (string)$result->status;
-				if ( $errcode != 200 || ( $status != 'success' && $status != 'pending' ) ) {
-					$msg = "Defensio error while getting comment results: $errcode $status $result->message\nWill try again.";
-					EventLog::log( $msg, 'warning', 'plugin', 'Defensio' );
+				$result = $this->get_defensio_xml( 'getDocument', 'getting comment results', array( $comment->info->defensio_signature ), array( 'success', 'pending' ) );
+				if ( !is_string($result) ) {
+					if ( (string)$result->status == 'success' ) {
+						$this->defensio_update_comment( $comment, $result );
+					}
+					else {
+						// else still pending
+						EventLog::log( 'Defensio Queue: Document still pending', 'debug', 'plugin', 'Defensio' );
+					}
 				}
-				else if ( $status == 'success' ) {
-					$this->defensio_update_comment( $comment, $result );
-				}
-				else {
-					// else still pending
-					EventLog::log( 'Defensio Queue: Document still pending', 'debug', 'plugin', 'Defensio' );
-				}
-				
+
 			}
 			else {
 				
@@ -526,24 +556,21 @@ class Defensio extends Plugin
 	 */
  	public function action_plugin_act_defensio_callback( ActionHandler $handler )
 	{
+		$id = $handler->handler_vars['comment_id'] * 1;
 		$comment = Comment::get( $handler->handler_vars['comment_id'] * 1 );
 		if ( !$comment ) {
-			$msg = "Defensio callback had invalid comment ID";
-			EventLog::log( $msg, 'warning', 'plugin', 'Defensio' );
+			EventLog::log( _t('Defensio callback had invalid comment ID: %d', array( $id ), 'defensio' ), 'warning', 'plugin', 'Defensio' );
 		}
 		else {
-			list( $errcode, $result ) = $this->defensio->handlePostDocumentAsyncCallback();
-			if ( (string)$result->status != 'success' ) {
-				$msg = "Defensio error during callback: $errcode $result->status $result->message";
-				EventLog::log( $msg, 'warning', 'plugin', 'Defensio' );
-			}
-			else if ( !isset($comment->info->defensio_signature) || $comment->info->defensio_signature != (string)$result->signature ) {
-				$msg = "Defensio signature and comment ID do not match";
-				EventLog::log( $msg, 'warning', 'plugin', 'Defensio' );
-			}
-			else {
-				EventLog::log( "Defensio callback!", 'info', 'plugin', 'Defensio' );
-				$this->defensio_update_comment( $comment, $result );
+			$result = $this->get_defensio_xml( 'handlePostDocumentAsyncCallback', 'in callback' );
+			if ( !is_string($result) ) {
+				if ( !isset($comment->info->defensio_signature) || $comment->info->defensio_signature != (string)$result->signature ) {
+					EventLog::log( _t('Defensio signature (%s) and comment ID (%d) do not correspond', array( (string)$result->signature, $id )), 'warning', 'plugin', 'Defensio' );
+				}
+				else {
+					EventLog::log( _t('Defensio callback is running!'), 'info', 'plugin', 'Defensio' );
+					$this->defensio_update_comment( $comment, $result );
+				}
 			}
 		}
   	}
@@ -622,11 +649,9 @@ class Defensio extends Plugin
 		}
 
 		// send document and check result
-		list( $errcode, $result ) = $this->defensio->postDocument( $params );
-		$status = (string)$result->status;
-		if ( $errcode != 200 || ( $status != 'success' && $status != 'pending' ) ) {
-			$msg = "Defensio error while submitting comment: $errcode $status $result->message\nWill queue to try again.";
-			EventLog::log( $msg, 'warning', 'plugin', 'Defensio' );
+		$result = $this->get_defensio_xml( 'postDocument', 'postting comment', array( $params ), array( 'success', 'pending' ) );
+		if ( is_string($result) ) {
+			// Will queue to try again?
 			$comment->status = self::COMMENT_STATUS_QUEUED;
 			self::append_spamcheck( _t('Queued for Defensio scan.', 'defensio') );
 			$comment->info->user_id = ($user instanceof User) ? $user->id : 0;
@@ -635,13 +660,14 @@ class Defensio extends Plugin
 		else {
 			$comment->info->defensio_signature = (string)$result->signature;
 			unset( $comment->info->user_id );
-			if ( $status == 'pending' ) {
-				EventLog::log( 'Comment posted, now pending', 'debug', 'plugin', 'Defensio' );
+			if ( (string)$result->status == 'pending' ) {
+				EventLog::log( _t('Comment posted, now pending', 'defensio'), 'debug', 'plugin', 'Defensio' );
+				self::append_spamcheck( _t('Queued for Defensio pending scan results.', 'defensio') );
 				$comment->status = self::COMMENT_STATUS_QUEUED;
 				$comment->update();
 			}
-			else { // $status == 'success'
-				EventLog::log( 'Comment posted, success', 'debug', 'plugin', 'Defensio' );
+			else { // $result->status == 'success'
+				EventLog::log( _t('Comment posted, success', 'defensio'), 'debug', 'plugin', 'Defensio' );
 				$this->defensio_update_comment( $comment, $result );
 			}
 		}
@@ -764,12 +790,8 @@ class Defensio extends Plugin
 			$ready = isset($comment->info->defensio_allow);
 			if ( $ready && $comment->info->defensio_allow != $allowed || !$ready ) {
 				// send update to Defensio
-				list($errcode, $result) = $this->defensio->putDocument( $comment->info->defensio_signature, array( 'allow' => $allowed ? 'true' : 'false' ) );
-				$status = (string)$result->status;
-				if ( $errcode != 200 || ( $status != 'success' && $status != 'pending' ) ) {
-					EventLog::log( "Failed to send updated status of comment: $errcode $status $result->message", 'warning', 'plugin', 'Defensio' );
-				}
-				else if ( $status != 'pending' ) {
+				$result = $this->get_defensio_xml( 'putDocument', 'updatint status of comment', array( $comment->info->defensio_signature, array( 'allow' => $allowed ? 'true' : 'false' ) ), array( 'success', 'pending' ) );
+				if ( !is_string($result) && (string)$result->status != 'pending' ) {
 					// update Defensio information
 					$comment->info->defensio_allow          = (string)$result->allowed == 'true';
 					$comment->info->defensio_classification = (string)$result->classification;
@@ -841,11 +863,7 @@ class Defensio extends Plugin
 			if ( $post->author->openid_url ) { $params['author-openid'] = $post->author->openid_url; }
 			
 			// submit
-			list( $errcode, $result ) = $this->defensio->postDocument( $params );
-			if ( $errcode != 200 || $result->status != 'success' ) {
-				$msg = "Defensio error while announcing post: $errcode $result->status $result->message";
-				EventLog::log( $msg, 'warning', 'plugin', 'Defensio' );
-			}
+			$this->get_defensio_xml( 'postDocument', 'announcing post', array( $params ) );
 		}
 	}
 	
