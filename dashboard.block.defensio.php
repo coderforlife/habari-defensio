@@ -15,10 +15,10 @@ else if ( $content->extended ) {
 			data.addColumn('number','Accuracy');
 			data.addRows([<?php
 $use_min_95 = true;
-foreach ($block->data as $row) {
-	$date = explode('-', $row['date']);
-	if ($row['accuracy'] < 95.0) { $use_min_95 = false; }
-	echo "[new Date($date[0],".($date[1]-1).",{$date[2]}),".round($row['accuracy']/100.0,3).'],';
+foreach ( $content->data as $row ) {
+	$date = explode( '-', $row['date'] );
+	if ( $row['accuracy'] < 95.0 ) { $use_min_95 = false; }
+	echo "[new Date($date[0]," . ( $date[1]-1) . ",{$date[2]})," . round($row['accuracy']/100.0,3) . '],';
 }
 ?>]);
 			new google.visualization.NumberFormat({pattern:'##0.0%'}).format(data, 1);
