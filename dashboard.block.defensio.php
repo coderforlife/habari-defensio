@@ -26,7 +26,7 @@ foreach ($data as $row) {
 				series:[{color:'black',visibleInLegend:false}],
 				hAxis:{format:'MMM-dd'},vAxis:{<?php echo $use_min_95 ? 'minValue:0.95,' : ''; ?>maxValue:1,format:'##0.0%'},
 			};
-			var chart=new google.visualization.LineChart(document.getElementById('chart_div'));
+			var chart=new google.visualization.LineChart(document.getElementById('defensio_chart'));
 			chart.draw(data,options);
 		}
 		</script>
