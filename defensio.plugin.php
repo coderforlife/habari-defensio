@@ -898,6 +898,28 @@ class Defensio extends Plugin
 	
 	
 	////////// Commment Display //////////
+	
+	/**
+	 * Potentially adds the 'moderated' category for queued comments.
+	 * This only works with experimental branches of Habari.
+	 * @param array $categories The current categories for the comment
+	 * @param Comment $c The comment to examine
+	 * @return array The augmented categories
+	 */
+	public function filter_comment_categories( array $categories, Comment $c )
+	{
+		if ( $c->type == COMMENT_STATUS_QUEUED ) {
+			$categories[] = 'queued';
+			if ( $c->ip == Utils::get_ip() && isset( $_COOKIE['comment_' . Options::get( 'GUID' )] ) ) {
+				list( $name, $email, $url ) = explode( '#', $_COOKIE['comment_' . Options::get( 'GUID' )] );
+				if ( $c->name == $name && $c->email == $email && $c->url == $url ) {
+					$categories[] = 'moderated';
+				}
+			}
+		}
+		return $categories;
+	}
+	
 	/**
 	 * Add the 'defensio queue' comment status.
 	 * @param array $comment_status_list The list of comment statuses
