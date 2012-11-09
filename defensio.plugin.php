@@ -207,7 +207,7 @@ class Defensio extends Plugin
 		$ui->append( 'static', 'divider', '<hr>' );
 
 		// plot option
-		$num_of_days = $form->append( 'text', 'num_of_days', 'option:' . self::OPTION_PLOT_DAYS, _t('Maximum number of days to plot:', 'defensio') );
+		$num_of_days = $ui->append( 'text', 'num_of_days', 'option:' . self::OPTION_PLOT_DAYS, _t('Maximum number of days to plot:', 'defensio') );
 		$num_of_days->add_validator( 'validate_regex', '/^0*([1-9]|[1-2][0-9]|30)$/', _t('Only integers between 1 and 30 may be entered for number of days to plot.', 'defensio') );
 		$num_of_days->add_validator( 'validate_range', 1, 30, _t('Number of days to plot must be between 1 and 30.', 'defensio') );
 
