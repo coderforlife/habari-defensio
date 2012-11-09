@@ -908,7 +908,7 @@ class Defensio extends Plugin
 	 */
 	public function filter_comment_categories( array $categories, Comment $c )
 	{
-		if ( $c->type == COMMENT_STATUS_QUEUED ) {
+		if ( $c->type == self::COMMENT_STATUS_QUEUED ) {
 			$categories[] = 'queued';
 			if ( $c->ip == Utils::get_ip() && isset( $_COOKIE['comment_' . Options::get( 'GUID' )] ) ) {
 				list( $name, $email, $url ) = explode( '#', $_COOKIE['comment_' . Options::get( 'GUID' )] );
