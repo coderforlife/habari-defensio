@@ -21,6 +21,7 @@ class Defensio extends Plugin
 	const OPTION_AUTO_APPROVE = 'defensio__auto_approve';
 	const OPTION_PROFANITY_FILTER_AUTHOR = 'defensio__profanity_filter_author';
 	const OPTION_PROFANITY_FILTER_CONTENT = 'defensio__profanity_filter_content';
+	const OPTION_PLOT_DAYS = 'defensio__plot_days';
 
 	private $defensio;
 	
@@ -105,7 +106,10 @@ class Defensio extends Plugin
 		if ( is_null(Options::get(self::OPTION_PROFANITY_FILTER_CONTENT)) ) {
 			Options::set(self::OPTION_PROFANITY_FILTER_CONTENT, false);
 		}
-				
+		if ( is_null(Options::get(self::OPTION_PLOT_DAYS)) ) {
+			Options::set(self::OPTION_PLOT_DAYS, 30);
+		}
+		
 		CronTab::add_cron(array(
 			'name' => 'defensio_queue',
 			'callback' => 'defensio_queue',
@@ -171,7 +175,7 @@ class Defensio extends Plugin
 			);
 		$api_key->add_validator( 'validate_required' );
 		$api_key->add_validator( array( $this, 'validate_api_key' ) );
-		$register = $ui->append( 'static', 'register', '<div><label><a href="http://defensio.com/signup" target="_blank">' . _t('Get a new Defensio API key.', 'defensio') . '</a></label></div><hr>' );
+		$ui->append( 'static', 'register', '<div><label><a href="http://defensio.com/signup" target="_blank">' . _t('Get a new Defensio API key.', 'defensio') . '</a></label></div><hr>' );
 
 		// min spaminess flag
 		$spaminess_flag = $ui->append(
@@ -191,7 +195,7 @@ class Defensio extends Plugin
 			);
 		$spaminess_delete->options = $spaminess_opts;
 
-		$register = $ui->append( 'static', 'extra', '<div><label>' . _t('* If and only if Defensio also flags the comment as spam. See (?) for more information.', 'defensio') . '</label></div><hr>' );
+		$ui->append( 'static', 'extra', '<div><label>' . _t('* If and only if Defensio also flags the comment as spam. See (?) for more information.', 'defensio') . '</label></div><hr>' );
 
 
 		// checkboxes
@@ -200,6 +204,12 @@ class Defensio extends Plugin
 		$filter_author  = $ui->append( 'checkbox', 'filter_author',  'option:' . self::OPTION_PROFANITY_FILTER_AUTHOR,  _t('Filter Profanity in Comment Author: ',      'defensio') );
 		$filter_content = $ui->append( 'checkbox', 'filter_content', 'option:' . self::OPTION_PROFANITY_FILTER_CONTENT, _t('Filter Profanity in Comment Content: ',     'defensio') );
 
+		$ui->append( 'static', 'divider', '<hr>' );
+
+		// plot option
+		$num_of_days = $form->append( 'text', 'num_of_days', 'option:' . self::OPTION_PLOT_DAYS, _t('Maximum number of days to plot:', 'defensio') );
+		$num_of_days->add_validator( 'validate_regex', '/^0*([1-9]|[1-2][0-9]|30)$/', _t('Only integers between 1 and 30 may be entered for number of days to plot.', 'defensio') );
+		$num_of_days->add_validator( 'validate_range', 1, 30, _t('Number of days to plot must be between 1 and 30.', 'defensio') );
 
 		$ui->append( 'submit', 'save', _t( 'Save', 'defensio' ) );
 		$ui->on_success( array($this, 'formui_submit') );
@@ -213,6 +223,7 @@ class Defensio extends Plugin
 	public function formui_submit( FormUI $form )
 	{
 		Session::notice( _t('Defensio options saved.', 'defensio') );
+		Cache::expire( 'defensio_extended_stats' );
 		$form->save();
 	}
 
@@ -301,7 +312,7 @@ class Defensio extends Plugin
 			);
 			$block->title = 'Defensio: '.$titles[$display];
 		}
-
+		
 		$stats = $extended ? $this->defensio_recent_extended_stats() : $this->defensio_stats();
 		// show an error in the dashboard if Defensio returns a bad response.
 		if ( is_string($stats) ) { $block->error_msg = $stats; return; }
@@ -352,11 +363,11 @@ class Defensio extends Plugin
 	 */
 	public function action_block_form_defensio( FormUI $form, $block )
 	{
-		$display = $form->append( 'select', 'display', $block, _t('Display', 'defensio') );
+		$display = $form->append( 'select', 'display', $block, _t('Display:', 'defensio') );
 		$display->options = array(
 			'basic' => 'Basic',
 			'recent_accuracy_plot' => 'Recent Accuracy Plot'
-		);
+		);		
 		$form->append( 'submit', 'submit', _t('Submit') );
 	}
 	
@@ -411,7 +422,7 @@ class Defensio extends Plugin
 			$stats = simplexml_load_string( Cache::get( 'defensio_extended_stats' ) );
 		}
 		else {
-			$stats = $this->defensio_extended_stats( strtotime('-30 days'), time() );
+			$stats = $this->defensio_extended_stats( strtotime( '-' . Options::get(self::OPTION_PLOT_DAYS) . ' days'), time() );
 			if ( !is_string($stats) ) {
 				Cache::set( 'defensio_extended_stats', $stats->asXML() );
 			}
