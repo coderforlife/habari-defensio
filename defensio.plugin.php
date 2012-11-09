@@ -33,19 +33,19 @@ class Defensio extends Plugin
 	private function handle_defensio_exception( Exception $ex )
 	{
 		if ( $ex instanceof DefensioConnectionTimeout ) {
-			$msg = $ex->getMesasge() ?
-				_t('Connection timed out', 'defensio') . ":\n" . $ex->getMesasge() . "\n$ex->error_code: $ex->error_string" :
+			$msg = $ex->getMessage() ?
+				_t('Connection timed out', 'defensio') . ":\n" . $ex->getMessage() . "\n$ex->error_code: $ex->error_string" :
 				_t('Connection timed out', 'defensio');
 		}
 		else if ( $ex instanceof DefensioConnectionError ) {
-			$msg = _t('Connection error', 'defensio') . ":\n" . $ex->getMesasge() . "\n$ex->error_code: $ex->error_string";
+			$msg = _t('Connection error', 'defensio') . ":\n" . $ex->getMessage() . "\n$ex->error_code: $ex->error_string";
 		}
 		else if ( $ex instanceof DefensioEmptyCallbackData ) {
 			$msg = _t('Defensio callback data was empty');
 		}
 		// Use the just the given message for DefensioInvalidKey, DefensioUnexpectedHTTPStatus, DefensioFail
 		else {
-			$msg = $ex->getMesasge();
+			$msg = $ex->getMessage();
 		}
 		EventLog::log( $msg , 'warning', 'plugin', 'Defensio' );
 		return $msg;
@@ -908,7 +908,7 @@ class Defensio extends Plugin
 	 */
 	public function filter_comment_categories( array $categories, Comment $c )
 	{
-		if ( $c->type == self::COMMENT_STATUS_QUEUED ) {
+		if ( $c->status == self::COMMENT_STATUS_QUEUED ) {
 			$categories[] = 'queued';
 			if ( $c->ip == Utils::get_ip() && isset( $_COOKIE['comment_' . Options::get( 'GUID' )] ) ) {
 				list( $name, $email, $url ) = explode( '#', $_COOKIE['comment_' . Options::get( 'GUID' )] );
