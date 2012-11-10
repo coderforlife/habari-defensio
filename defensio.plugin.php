@@ -308,7 +308,8 @@ class Defensio extends Plugin
 			$extended = true;
 			$display = $block->display;
 			$titles = array(
-				'recent_accuracy_plot' => 'Recent Accuracy'
+				'recent_accuracy_plot' => 'Recent Accuracy',
+				'type_counts_plot' => 'Type Counts',
 			);
 			$block->title = 'Defensio: '.$titles[$display];
 		}
@@ -366,8 +367,9 @@ class Defensio extends Plugin
 		$display = $form->append( 'select', 'display', $block, _t('Display:', 'defensio') );
 		$display->options = array(
 			'basic' => 'Basic',
-			'recent_accuracy_plot' => 'Recent Accuracy Plot'
-		);		
+			'recent_accuracy_plot' => 'Recent Accuracy Plot',
+			'type_counts_plot' => 'Type Counts Plot',
+		);
 		$form->append( 'submit', 'submit', _t('Submit') );
 	}
 	
