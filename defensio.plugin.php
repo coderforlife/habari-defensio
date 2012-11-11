@@ -273,7 +273,7 @@ class Defensio extends Plugin
 	 * @param array $block_list An array of block names, indexed by unique string identifiers
 	 * @return array The altered array
 	 */
-	public function filter_block_list( $block_list )
+	public function filter_block_list( array $block_list )
 	{
 		if (User::identify()->can('manage_all_comments')) {
 			$block_list['defensio'] = _t( 'Defensio', 'defensio' );
@@ -286,7 +286,7 @@ class Defensio extends Plugin
 	 * @param array $block_list An array of block names, indexed by unique string identifiers
 	 * @return array The altered array
 	 */
-	public function filter_dashboard_block_list( $block_list )
+	public function filter_dashboard_block_list( array $block_list )
 	{
 		$block_list['defensio'] = _t( 'Defensio', 'defensio' );
 		return $block_list;
@@ -297,12 +297,12 @@ class Defensio extends Plugin
 	 * @param Block $block The block object
 	 * @param Theme $theme The theme that the block will be output with
 	 */
-	public function action_block_content_defensio( $block, Theme $theme )
+	public function action_block_content_defensio( Block $block, Theme $theme )
 	{
 		if ( !isset($block->display) || $block->display == 'basic' ) {
 			$extended = false;
 			$display = 'basic';
-			$block->title = 'Defensio';
+			$title = 'Defensio';
 		}
 		else {
 			$extended = true;
@@ -311,8 +311,11 @@ class Defensio extends Plugin
 				'recent_accuracy_plot' => 'Recent Accuracy',
 				'type_counts_plot' => 'Type Counts',
 			);
-			$block->title = 'Defensio: '.$titles[$display];
+			$title = 'Defensio: ' . $titles[$display];
 		}
+		$block->title = $title;
+		$block->link = URL::get('admin', array('page' => 'comments'));
+		$block->has_options = true;
 		
 		$stats = $extended ? $this->defensio_recent_extended_stats() : $this->defensio_stats();
 		// show an error in the dashboard if Defensio returns a bad response.
@@ -353,8 +356,44 @@ class Defensio extends Plugin
 			$block->learning_status =  (string)$stats->{'learning-status'};
 		}
 
+		$block->_title = $title; // _ is necessary due to special handling in Habari internal
 		$block->link = URL::get('admin', array('page' => 'comments'));
 		$block->has_options = true;
+	}
+
+	/**
+	 * Set the priorities of action_ and filter_ functions in this class. They default
+	 * to "8". The 'action_block_content' needs to run absolutely last since the Habari
+	 * internal version of it modifies the same properties.
+	 * @return array The priorities of action_ and filter_ functions in the class.
+	 */
+	public function set_priorities()
+	{
+		return array(
+			'action_block_content' => 1000,
+		);
+	}
+
+	/**
+	 * Modify the title of the block (again). This extra step is necessary due to
+	 * some special handling done in Habari internal.
+	 * @param Block $block The block object
+	 * @param Theme $theme The theme that the block will be output with
+	 */
+	public function action_block_content( Block $block, Theme $theme )
+	{
+		if ( $block->type == 'defensio' ) {
+			if ( $block->extended ) {
+				$titles = array(
+					'recent_accuracy_plot' => 'Recent Accuracy',
+					'type_counts_plot' => 'Type Counts',
+				);
+				$block->_title = 'Defensio: ' . $titles[$block->display];
+			}
+			else {
+				$block->_title = 'Defensio';
+			}
+		}
 	}
 
 	/**
@@ -362,7 +401,7 @@ class Defensio extends Plugin
 	 * @param FormUI $form The form that will set the options
 	 * @param Block $block The block that we set the options for
 	 */
-	public function action_block_form_defensio( FormUI $form, $block )
+	public function action_block_form_defensio( FormUI $form, Block $block )
 	{
 		$display = $form->append( 'select', 'display', $block, _t('Display:', 'defensio') );
 		$display->options = array(
