@@ -482,8 +482,15 @@ class Defensio extends Plugin
 	 */
 	public function filter_comment_content_out( $content, Comment $comment )
 	{
-		if ( Options::get( self::OPTION_PROFANITY_FILTER_CONTENT ) && $comment->info->defensio_profanity_match ) {
-			$content = $this->defensio_profanity_filter( $content );
+		if ( Options::get( self::OPTION_PROFANITY_FILTER_CONTENT ) ) {
+			if ( !isset($comment->info->defensio_profanity_match) ) {
+				$out = $this->defensio_profanity_filter( $content );
+				$comment->info->defensio_profanity_match = ( $out != $content );
+				$content = $out;
+			}
+			else if ( $comment->info->defensio_profanity_match ) {
+				$content = $this->defensio_profanity_filter( $content );
+			}
 		}
 		return $content;
 	}
@@ -497,7 +504,14 @@ class Defensio extends Plugin
 	public function filter_comment_name_out( $name, Comment $comment )
 	{
 		if ( Options::get( self::OPTION_PROFANITY_FILTER_AUTHOR ) ) {
-			$name = $this->defensio_profanity_filter( $name );
+			if ( !isset($comment->info->defensio_profanity_match_name) ) {
+				$out = $this->defensio_profanity_filter( $name );
+				$comment->info->defensio_profanity_match_name = ( $out != $name );
+				$name = $out;
+			}
+			else if ( $comment->info->defensio_profanity_match_name ) {
+				$name = $this->defensio_profanity_filter( $name );
+			}
 		}
 		return $name;
 	}
@@ -512,13 +526,13 @@ class Defensio extends Plugin
 		if ( is_string($data) ) {
 			$in = array( 'text' => $data );
 		}
-		else {
+		else if ( is_array($data) ) {
 			// convert array names to xml-compatible element names
 			$in = array();
 			$map = array();
 			foreach ( $data as $key => $value ) {
-				$key_xml = $key;
-				$count = count($key);
+				$key_xml = (string)$key;
+				$count = count($key_xml);
 				for ($i = 0; $i < $count; ++$i) {
 					if (!ctype_alnum($key_xml[$i]))
 						$key_xml[$i] = '_';
@@ -527,9 +541,12 @@ class Defensio extends Plugin
 				if (!ctype_alpha($a) || ($a == 'x' || $a == 'X') && stripos($key_xml, 'xml') === 0) {
 					$key_xml = 'text_'.$key_xml;
 				}
-				$in[$key_xml] = $value;
+				$in[$key_xml] = (string)$value;
 				$map[$key_xml] = $key;
 			}
+		}
+		else {
+			throw new Exception('Argument must be string or array.');
 		}
 		
 		// send data
