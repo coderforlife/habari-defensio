@@ -7,7 +7,7 @@ require_once __DIR__ . '/Defensio.php';
  */
 class Defensio extends Plugin
 {
-	const CHECK_FREQUENCY = 300; // 5 min
+	const CHECK_FREQUENCY = 600; // 10 min
 	const MAX_COMMENT_DAYS = 30;
 	const COMMENT_STATUS_QUEUED = 9;
 
@@ -645,7 +645,7 @@ class Defensio extends Plugin
 		$id = $handler->handler_vars['comment_id'] * 1;
 		$comment = Comment::get( $handler->handler_vars['comment_id'] * 1 );
 		if ( !$comment ) {
-			EventLog::log( _t('Defensio callback had invalid comment ID: %d', array( $id ), 'defensio' ), 'warning', 'plugin', 'Defensio' );
+			EventLog::log( _t('Defensio callback had invalid comment ID: %d (probably already deleted)', array( $id ), 'defensio' ), 'debug', 'plugin', 'Defensio' );
 		}
 		else {
 			$result = $this->get_defensio_xml( 'handlePostDocumentAsyncCallback', 'in callback' );

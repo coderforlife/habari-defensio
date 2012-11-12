@@ -39,9 +39,9 @@
 		not marked as spam will show up immediately on your site.</p>
 		
 		<p>This plugin uses asynchronous processing of comments to improve quality of results and to
-		speed up the user interaction. While pending results they will be marked as blue in the admin
-		page. Defensio automatically sends updates as they are ready. However, just in case, the
-		plugin checks every 5 minutes for updates as well.</p>
+		speed up the user interaction. While the spam check results are pending, comments will be
+		marked as blue in the admin page. Defensio automatically sends updates as they are ready.
+		However, just in case, the plugin checks every 10 minutes for updates as well.</p>
 		
 		<p>This plugin also includes access to the Defensio profanity filter. You can enable for
 		comment contents and/or author names. Enabling author name filtering may slow down pages with
