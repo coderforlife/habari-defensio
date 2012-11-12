@@ -47,6 +47,11 @@
 		comment contents and/or author names. Enabling author name filtering may slow down pages with
 		large numbers of comments. The filtering will not change the actual content of comments but
 		instead modifies the output so you can still examine the originals.</p>
+		
+		<p>This plugin includes a dashboard module that shows you the statistics of the Defensio
+		filter including recent accuracy, unwanted comment counts, legitimate comment counts, mistakes,
+		and status of the learning filter. The module can be switched to show a plot of either the
+		recent accuracy or the different types (unwanted, legitimate, and mistakes) over time.</p>
 		]]></value>
 	</help>
 	
