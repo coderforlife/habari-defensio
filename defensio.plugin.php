@@ -839,7 +839,7 @@ class Defensio extends Plugin
 		$is_approved = $new_value == Comment::status('approved');
 		$is_spam = $new_value == Comment::status('spam');
 		if ( ($is_approved || $is_spam) && $this->defensio_update_status( $comment, $is_approved ) ) {
-			$this->report_defensio_update( $allowed, 1 );
+			$this->report_defensio_update( $is_approved, 1 );
 		}
 	}
 	
