@@ -46,7 +46,7 @@ class Defensio extends Plugin
 		}
 		else if ( $ex instanceof DefensioUnexpectedHTTPStatus && $ex->http_status ) {
 			$logit = false;
-			$msg = _t('Defensio server is undergoing maintence');
+			$msg = _t('Defensio server is currently undergoing maintence');
 		}
 		// Use the just the given message for DefensioInvalidKey, DefensioUnexpectedHTTPStatus, DefensioFail
 		else {
@@ -71,8 +71,13 @@ class Defensio extends Plugin
 		try {
 			list( $http_status, $xml ) = call_user_func_array( array( $this->defensio, $func ), $params );
 			if ( $http_status != 200 || !in_array( (string)$xml->status, $allowed_statuses ) ) {
-				$msg = _t("<b>Defensio Error while $desc:</b> %d %s %s", array($http_status, $xml->status, $xml->message), 'defensio');
-				EventLog::log( $msg, 'warning', 'plugin', 'Defensio' );
+				if ($http_status == 503) {
+					$msg = _t('Defensio server is currently undergoing maintence');
+				}
+				else {
+					$msg = _t("<b>Defensio Error while $desc:</b> %d %s %s", array($http_status, $xml ? $xml->status : '', $xml ? $xml->message : ''), 'defensio');
+					EventLog::log( $msg, 'warning', 'plugin', 'Defensio' );
+				}
 				return $msg;
 			}
 			return $xml;
