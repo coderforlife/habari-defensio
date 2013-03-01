@@ -32,6 +32,7 @@ class Defensio extends Plugin
 	 */
 	private function handle_defensio_exception( Exception $ex )
 	{
+		$logit = true;
 		if ( $ex instanceof DefensioConnectionTimeout ) {
 			$msg = $ex->getMessage() ?
 				_t('Connection timed out', 'defensio') . ":\n" . $ex->getMessage() . "\n$ex->error_code: $ex->error_string" :
@@ -43,11 +44,17 @@ class Defensio extends Plugin
 		else if ( $ex instanceof DefensioEmptyCallbackData ) {
 			$msg = _t('Defensio callback data was empty');
 		}
+		else if ( $ex instanceof DefensioUnexpectedHTTPStatus && $ex->http_status ) {
+			$logit = false;
+			$msg = _t('Defensio server is undergoing maintence');
+		}
 		// Use the just the given message for DefensioInvalidKey, DefensioUnexpectedHTTPStatus, DefensioFail
 		else {
 			$msg = $ex->getMessage();
 		}
-		EventLog::log( $msg , 'warning', 'plugin', 'Defensio' );
+		if ($logit) {
+			EventLog::log( $msg , 'warning', 'plugin', 'Defensio' );
+		}
 		return $msg;
 	}
 	
