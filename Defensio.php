@@ -172,10 +172,7 @@ class DefensioAPI
             throw $ex;
         }
 
-        if (!$result_object || 
-             !in_array($result_object->status, array('success', 'pending')) &&
-             $throw_on_failure ) {
-
+        if ( (!$result_object || !in_array($result_object->status, array('success', 'pending'))) && $throw_on_failure ) {
           $msg = "Unknown reason";
           if($result_object && !empty($result_object->message))
             $msg = $result_object->message;
