@@ -48,7 +48,7 @@ class Defensio extends Plugin
 			$logit = false;
 			$msg = _t('Defensio server is currently undergoing maintence');
 		}
-		// Use the just the given message for DefensioInvalidKey, DefensioUnexpectedHTTPStatus, DefensioFail
+		// Use just the given message for DefensioInvalidKey, DefensioUnexpectedHTTPStatus, DefensioFail
 		else {
 			$msg = $ex->getMessage();
 		}
@@ -64,13 +64,14 @@ class Defensio extends Plugin
 	 * @param string $desc What this function does (fills in the sentence "while ...")
 	 * @param array $params The parameters to pass to the function, default no paremeters (empty array)
 	 * @param array $allowed_statuses The statuses that are allowed as "successful" (default is just 'success', some functions will need 'pending' as well)
-	 * @return mixed If there is a problem then a string with the error message is returned, otherwise the SimpleXMLElement object with the response.
+	 * @param array $allowed_http_statuses The HTTP statuses that are allowed as "successful" (default is just 200, but if any others need special handling they should be listed as well)
+	 * @return array(boolean, mixed) If there is a problem then a false and a string with the error message is returned, otherwise true and the SimpleXMLElement object with the response.
 	 */
-	private function get_defensio_xml( $func, $desc, array $params = array(), array $allowed_statuses = array('success') )
+	private function get_defensio_xml( $func, $desc, array $params = array(), array $allowed_statuses = array('success'), array $allowed_http_statuses = array(200) )
 	{
 		try {
 			list( $http_status, $xml ) = call_user_func_array( array( $this->defensio, $func ), $params );
-			if ( $http_status != 200 || !in_array( (string)$xml->status, $allowed_statuses ) ) {
+			if ( !in_array( $http_status, $allowed_http_statuses ) || $http_status == 200 && !in_array( (string)$xml->status, $allowed_statuses ) ) {
 				if ($http_status == 503) {
 					$msg = _t('Defensio server is currently undergoing maintence');
 				}
@@ -78,12 +79,12 @@ class Defensio extends Plugin
 					$msg = _t("<b>Defensio Error while $desc:</b> %d %s %s", array($http_status, $xml ? $xml->status : '', $xml ? $xml->message : ''), 'defensio');
 					EventLog::log( $msg, 'warning', 'plugin', 'Defensio' );
 				}
-				return $msg;
+				return array(false, $msg);
 			}
-			return $xml;
+			return array(true, $xml);
 		}
 		catch ( Exception $ex ) {
-			return _t('<b>Defensio Server Error:</b> %s', array( $this->handle_defensio_exception( $ex ) ), 'defensio');
+			return array(false, _t('<b>Defensio Server Error:</b> %s', array( $this->handle_defensio_exception( $ex ) ), 'defensio'));
 		}
 	}
 	
@@ -211,10 +212,10 @@ class Defensio extends Plugin
 
 
 		// checkboxes
-		$announce_posts = $ui->append( 'checkbox', 'announce_posts', 'option:' . self::OPTION_ANNOUNCE_POSTS,           _t('Announce New Posts To Defensio: ',          'defensio') );
-		$auto_approve   = $ui->append( 'checkbox', 'auto_approve',   'option:' . self::OPTION_AUTO_APPROVE,             _t('Automatically Approve Non-Spam Comments: ', 'defensio') );
-		$filter_author  = $ui->append( 'checkbox', 'filter_author',  'option:' . self::OPTION_PROFANITY_FILTER_AUTHOR,  _t('Filter Profanity in Comment Author: ',      'defensio') );
-		$filter_content = $ui->append( 'checkbox', 'filter_content', 'option:' . self::OPTION_PROFANITY_FILTER_CONTENT, _t('Filter Profanity in Comment Content: ',     'defensio') );
+		$announce_posts = $ui->append( 'checkbox', 'announce_posts', 'option:' . self::OPTION_ANNOUNCE_POSTS,					 _t('Announce New Posts To Defensio: ',					'defensio') );
+		$auto_approve	 = $ui->append( 'checkbox', 'auto_approve',	 'option:' . self::OPTION_AUTO_APPROVE,						 _t('Automatically Approve Non-Spam Comments: ', 'defensio') );
+		$filter_author	= $ui->append( 'checkbox', 'filter_author',	'option:' . self::OPTION_PROFANITY_FILTER_AUTHOR,	_t('Filter Profanity in Comment Author: ',			'defensio') );
+		$filter_content = $ui->append( 'checkbox', 'filter_content', 'option:' . self::OPTION_PROFANITY_FILTER_CONTENT, _t('Filter Profanity in Comment Content: ',		 'defensio') );
 
 		$ui->append( 'static', 'divider', '<hr>' );
 
@@ -229,7 +230,7 @@ class Defensio extends Plugin
 	}
 
 	/**
-	 * Handle the form submition and save options
+	 * Handle the form submission and save options
 	 * @param FormUI $form The FormUI that was submitted
 	 */
 	public function formui_submit( FormUI $form )
@@ -347,10 +348,10 @@ class Defensio extends Plugin
 			$data = array();
 			foreach ($stats->data->datum as $datum) {
 				$data[] = array(
-					'date'            =>  (string)$datum->date, // Y-m-d
-					'accuracy'        => ((string)$datum->accuracy) * 100.0,
-					'unwanted'        => ((string)$datum->unwanted) * 1,
-					'legitimate'      => ((string)$datum->legitimate) * 1,
+					'date'						=>	(string)$datum->date, // Y-m-d
+					'accuracy'				=> ((string)$datum->accuracy) * 100.0,
+					'unwanted'				=> ((string)$datum->unwanted) * 1,
+					'legitimate'			=> ((string)$datum->legitimate) * 1,
 					'false-positives' => ((string)$datum->{'false-positives'}) * 1,
 					'false-negatives' => ((string)$datum->{'false-negatives'}) * 1,
 				);
@@ -358,14 +359,14 @@ class Defensio extends Plugin
 			$block->chart_data = $data;
 		}
 		else {
-			$block->accuracy        = ((string)$stats->accuracy) * 100.0;
-			$block->spam            = ((string)$stats->unwanted->spam) * 1;
-			$block->malicious       = ((string)$stats->unwanted->malicious) * 1;
-			$block->legitimate      = ((string)$stats->legitimate->total) * 1;
+			$block->accuracy				= ((string)$stats->accuracy) * 100.0;
+			$block->spam						= ((string)$stats->unwanted->spam) * 1;
+			$block->malicious			 = ((string)$stats->unwanted->malicious) * 1;
+			$block->legitimate			= ((string)$stats->legitimate->total) * 1;
 			$block->false_negatives = ((string)$stats->{'false-negatives'}) * 1;
 			$block->false_positives = ((string)$stats->{'false-positives'}) * 1;
-			$block->learning        =  (string)$stats->learning == 'true';
-			$block->learning_status =  (string)$stats->{'learning-status'};
+			$block->learning				=	(string)$stats->learning == 'true';
+			$block->learning_status =	(string)$stats->{'learning-status'};
 		}
 
 		$block->_title = $title; // _ is necessary due to special handling in Habari internal
@@ -434,8 +435,8 @@ class Defensio extends Plugin
 			$stats = simplexml_load_string( Cache::get( 'defensio_stats' ) );
 		}
 		else {
-			$stats = $this->get_defensio_xml( 'getBasicStats', 'getting stats' );
-			if ( !is_string($stats) ) {
+			list($success, $stats) = $this->get_defensio_xml( 'getBasicStats', 'getting stats' );
+			if ( $success ) {
 				Cache::set( 'defensio_stats', $stats->asXML() );
 			}
 		}
@@ -446,7 +447,7 @@ class Defensio extends Plugin
 	 * Get the extended Defensio stats given a date range.
 	 * @param mixed $from int with Unix timestamp or string parsable by strtotime
 	 * @param mixed $to int with Unix timestamp, string parsable by strtotime, or if not provided 30 days after from
-	 * @return mixed The stats as SimpleXMLElement or a string with an error message.
+	 * @return array(bool, mixed) The result of get_defensio_xml()
 	 */
 	private function defensio_extended_stats( $from, $to = null )
 	{
@@ -475,8 +476,8 @@ class Defensio extends Plugin
 			$stats = simplexml_load_string( Cache::get( 'defensio_extended_stats' ) );
 		}
 		else {
-			$stats = $this->defensio_extended_stats( strtotime( '-' . Options::get(self::OPTION_PLOT_DAYS) . ' days'), time() );
-			if ( !is_string($stats) ) {
+			list($success, $stats) = $this->defensio_extended_stats( strtotime( '-' . Options::get(self::OPTION_PLOT_DAYS) . ' days'), time() );
+			if ( $success ) {
 				Cache::set( 'defensio_extended_stats', $stats->asXML() );
 			}
 		}
@@ -496,8 +497,8 @@ class Defensio extends Plugin
 	{
 		if ( Options::get( self::OPTION_PROFANITY_FILTER_CONTENT ) ) {
 			if ( !isset($comment->info->defensio_profanity_match) ) {
-				$out = $this->defensio_profanity_filter( $content );
-				$comment->info->defensio_profanity_match = ( $out != $content );
+				list($success, $out) = $this->defensio_profanity_filter( $content );
+				if ( $success ) { $comment->info->defensio_profanity_match = ( $out != $content ); }
 				$content = $out;
 			}
 			else if ( $comment->info->defensio_profanity_match ) {
@@ -517,8 +518,8 @@ class Defensio extends Plugin
 	{
 		if ( Options::get( self::OPTION_PROFANITY_FILTER_AUTHOR ) ) {
 			if ( !isset($comment->info->defensio_profanity_match_name) ) {
-				$out = $this->defensio_profanity_filter( $name );
-				$comment->info->defensio_profanity_match_name = ( $out != $name );
+				list($success, $out) = $this->defensio_profanity_filter( $name );
+				if ( $success ) { $comment->info->defensio_profanity_match_name = ( $out != $name ); }
 				$name = $out;
 			}
 			else if ( $comment->info->defensio_profanity_match_name ) {
@@ -531,7 +532,7 @@ class Defensio extends Plugin
 	/**
 	 * Filter out profanity with the Defensio.
 	 * @param mixed $data string with text to filter or an array of strings to filter
-	 * @return mixed The results of the filter, in the same format as given to the function. If there is an error the original data is returned.
+	 * @return array(bool, mixed) First element is success, the second is the results of the filter, in the same format as given to the function. If there is an error the original data is returned.
 	 */
 	public function defensio_profanity_filter( $data )
 	{
@@ -562,18 +563,16 @@ class Defensio extends Plugin
 		}
 		
 		// send data
-		$filtered = $this->get_defensio_xml( 'postProfanityFilter', 'getting extended stats', array( $in ) );
-		if ( is_string($filtered) ) {
-			return $data;
-		}
+		list($success, $filtered) = $this->get_defensio_xml( 'postProfanityFilter', 'running profanity filter', array( $in ) );
+		if ( !$success ) { return array(false, $data); }
 		
 		// convert back to input format
 		if ( is_string($data) )
-			return (string)$filtered->filtered->text;
+			return array(true, (string)$filtered->filtered->text);
 		$out = array();
 		foreach ( $map as $key_xml => $key )
 			$out[$key] = (string)$filtered->filtered->$key_xml;
-		return $out;
+		return array(true, $out);
 	}
 	
 	
@@ -591,10 +590,10 @@ class Defensio extends Plugin
 
 	/**
 	 * The Defensio polling queue. Checks queued comments:
-	 *  * removes them from the queue if they have been there for more than 30 days
-	 *  * removes them is the pending asynchronous result is complete
-	 *  * re-submits a request if the original failed
-	 * This runs every 5 minutes.
+	 *	* removes them from the queue if they have been there for more than 30 days
+	 *	* removes them is the pending asynchronous result is complete
+	 *	* re-submits a request if the original failed
+	 * This runs every 10 minutes.
 	 * @param bool $cron_result The cron result, which is simply ignored and returned
 	 * @return bool The given cron result, defaulting to true
 	 */
@@ -608,14 +607,29 @@ class Defensio extends Plugin
 			else if ( isset($comment->info->defensio_signature) ) {
 				
 				// check pending asynchronous result
-				$result = $this->get_defensio_xml( 'getDocument', 'getting comment results', array( $comment->info->defensio_signature ), array( 'success', 'pending' ) );
-				if ( !is_string($result) ) {
-					if ( (string)$result->status == 'success' ) {
+				list($success, $result) = $this->get_defensio_xml( 'getDocument', 'getting comment results', array( $comment->info->defensio_signature ), array( 'success', 'pending' ), array( 200, 404 ) );
+				if ( $success ) {
+					switch ((string)$result->status) {
+					case 'fail':
+						// we got a 404 (not found) error
+						if ( isset($comment->info->defensio_had_404) && $comment->info->defensio_had_404 ) {
+							// really a problem, we will resubmit it
+							unset($comment->info->defensio_had_404);
+							unset($comment->info->defensio_signature);
+							$this->defensio_post_comment( $comment, User::get_by_id($comment->info->user_id) );
+						}
+						else {
+							// we probably checked too soon after submitting, give it one more chance
+							$comment->info->defensio_had_404 = true;
+						}
+						break;
+					case 'success':
 						$this->defensio_update_comment( $comment, $result );
+						break;
+					default: // still pending
 					}
-					else {
-						// else still pending
-					}
+				} else {
+					// there was an error, we will try again later
 				}
 
 			}
@@ -655,23 +669,27 @@ class Defensio extends Plugin
  	public function action_plugin_act_defensio_callback( ActionHandler $handler )
 	{
 		$id = $handler->handler_vars['comment_id'] * 1;
-		$comment = Comment::get( $handler->handler_vars['comment_id'] * 1 );
+		$comment = Comment::get( $id );
 		if ( !$comment ) {
 			EventLog::log( _t('Defensio callback had invalid comment ID: %d (probably already deleted)', array( $id ), 'defensio' ), 'debug', 'plugin', 'Defensio' );
 		}
 		else {
-			$result = $this->get_defensio_xml( 'handlePostDocumentAsyncCallback', 'in callback' );
-			if ( !is_string($result) ) {
+			list($success, $result) = $this->get_defensio_xml( 'handlePostDocumentAsyncCallback', 'in callback' );
+			if ( $success ) {
 				if ( !isset($comment->info->defensio_signature) || $comment->info->defensio_signature != (string)$result->signature ) {
-					EventLog::log( _t( 'Defensio signature (%s) and comment ID (%d) do not correspond', array( (string)$result->signature, $id ), 'defensio' ), 'warning', 'plugin', 'Defensio' );
+					// something got confused, we will just poll it later
+					EventLog::log( _t( 'Defensio signature (%s) and comment ID (%d) do not correspond', array( (string)$result->signature, $id ), 'defensio' ), 'debug', 'plugin', 'Defensio' );
 				}
 				else {
 					EventLog::log( _t( 'Defensio callback is running', 'defensio' ), 'debug', 'plugin', 'Defensio' );
 					$this->defensio_update_comment( $comment, $result );
 				}
 			}
+			else {
+				// the callback data was empty, just wait for us to poll for it
+			}
 		}
-  	}
+ 	}
 
 	/**
 	 * Posts a comment to Defensio and updates it with any information. If it is unsuccessfully submitted
@@ -738,7 +756,7 @@ class Defensio extends Plugin
 
 		// set additional/conditional fields
 		if ( $comment->email ) { $params['author-email'] = $comment->email; }
-		if ( $comment->url )   { $params['author-url']   = $comment->url;   }
+		if ( $comment->url )	 { $params['author-url']	 = $comment->url;	 }
 		if ( $user instanceof User && $user->id != 0 ) {
 			$params['author-logged-in'] = $user->loggedin ? 'true' : 'false';
 			// @todo test for administrator, editor, etc. as well
@@ -747,9 +765,9 @@ class Defensio extends Plugin
 		}
 
 		// send document and check result
-		$result = $this->get_defensio_xml( 'postDocument', 'postting comment', array( $params ), array( 'success', 'pending' ) );
-		if ( is_string($result) ) {
-			// will queue to try again?
+		list($success, $result) = $this->get_defensio_xml( 'postDocument', 'posting comment', array( $params ), array( 'success', 'pending' ) );
+		if ( !$success ) {
+			// will queue to try again
 			EventLog::log( _t( 'Defensio failed - will retry', 'defensio' ), 'debug', 'plugin', 'Defensio' );
 			$comment->status = self::COMMENT_STATUS_QUEUED;
 			self::append_spamcheck( $comment, _t('Queued for Defensio scan.', 'defensio') );
@@ -778,10 +796,20 @@ class Defensio extends Plugin
 	private function defensio_update_comment( Comment $comment, SimpleXMLElement $data )
 	{
 		// copy the Defensio data
-		$comment->info->defensio_allow           = $allow     =  (string)$data->allow == 'true';
-		$comment->info->defensio_classification  = $type      =  (string)$data->classification; // legitimate, spam, and malicious
-		$comment->info->defensio_spaminess       = $spaminess = ((string)$data->spaminess) * 100.0;
-		$comment->info->defensio_profanity_match =               (string)$data->{'profanity-match'} == 'true';
+		$comment->info->defensio_allow					 = $allow		 =	(string)$data->allow == 'true';
+		$comment->info->defensio_classification	= $type			=	(string)$data->classification; // legitimate, spam, and malicious
+		$comment->info->defensio_spaminess			 = $spaminess = ((string)$data->spaminess) * 100.0;
+		$comment->info->defensio_profanity_match =							 (string)$data->{'profanity-match'} == 'true';
+
+		// check if it is already planned to be allowed or not
+		if ( isset($comment->info->defensio_should_be_allowed) ) {
+			if ($comment->info->defensio_should_be_allowed != $allow) {
+				$this->defensio_update_status( $comment, $comment->info->defensio_should_be_allowed );
+				$allow = $comment->info->defensio_allow;
+				$type	= $comment->info->defensio_classification;
+			}
+			unset($comment->info->defensio_should_be_allowed);
+		}
 
 		// see if it's spam or the spaminess is greater than min allowed spaminess
 		$min_spaminess_flag = Options::get( self::OPTION_FLAG_SPAMINESS );
@@ -791,20 +819,15 @@ class Defensio extends Plugin
 			$comment->delete();
 		}
 		else {
-			if ( !$allow || $type != 'legitimate' ) { self::append_spamcheck( $comment, _t('Defensio flagged as \'%s\'',                 array( $type ),      'defensio') ); }
-			if ( $spaminess > 0 )                   { self::append_spamcheck( $comment, _t('Defensio gave a spaminess rating of %.2f%%', array( $spaminess ), 'defensio') ); }
+			if ( !$allow || $type != 'legitimate' ) { self::append_spamcheck( $comment, _t('Defensio flagged as \'%s\'',								 array( $type ),			'defensio') ); }
+			if ( $spaminess > 0 )									 { self::append_spamcheck( $comment, _t('Defensio gave a spaminess rating of %.2f%%', array( $spaminess ), 'defensio') ); }
 
 			if ( !$allow && $spaminess >= $min_spaminess_flag ) {
 				$comment->status = 'spam';
 			}
 			else {
 				// it's not spam so if auto_approve is set, approve it
-				if ( Options::get( self::OPTION_AUTO_APPROVE ) ) {
-					$comment->status = 'approved';
-				}
-				else {
-					$comment->status = 'unapproved';
-				}
+				$comment->status = Options::get( self::OPTION_AUTO_APPROVE ) ? 'approved' : 'unapproved';
 			}
 			$comment->update();
 		}
@@ -888,19 +911,26 @@ class Defensio extends Plugin
 			$ready = isset($comment->info->defensio_allow);
 			if ( $ready && $comment->info->defensio_allow != $allowed || !$ready ) {
 				// send update to Defensio
-				$result = $this->get_defensio_xml( 'putDocument', 'updatint status of comment', array( $comment->info->defensio_signature, array( 'allow' => $allowed ? 'true' : 'false' ) ), array( 'success', 'pending' ) );
-				if ( !is_string($result) && (string)$result->status != 'pending' ) {
-					// update Defensio information
-					EventLog::log( _t( 'Updated Defensio status of comment', 'defensio' ), 'debug', 'plugin', 'Defensio' );
-					$comment->info->defensio_allow          = (string)$result->allowed == 'true';
-					$comment->info->defensio_classification = (string)$result->classification;
-					return true;
+				list($success, $result) = $this->get_defensio_xml( 'putDocument', 'updating status of comment', array( $comment->info->defensio_signature, array( 'allow' => $allowed ? 'true' : 'false' ) ), array( 'success', 'pending' ) );
+				// @todo - this used to give 404 errors 75% of the time... does it still happen?
+				if ( $success ) {
+					if ( (string)$result->status == 'success' ) {
+						// update Defensio information
+						EventLog::log( _t( 'Updated Defensio status of comment', 'defensio' ), 'debug', 'plugin', 'Defensio' );
+						$comment->info->defensio_allow					= (string)$result->allowed == 'true';
+						$comment->info->defensio_classification = (string)$result->classification;
+						return true;
+					}
+					else {
+						// pending update - is this even possible?
+						//@todo
+					}
 				}
 			}
 		}
 		else if ( $comment->status == self::COMMENT_STATUS_QUEUED ) {
-			// never submitted
-			//@todo
+			// never submitted - will update it after it gets off the queue
+			$comment->info->defensio_should_be_allowed = $allowed;
 		}
 		else {
 			// not a Defensio comment
@@ -961,7 +991,7 @@ class Defensio extends Plugin
 			);
 			if ( $post->author->openid_url ) { $params['author-openid'] = $post->author->openid_url; }
 			
-			// submit
+			// submit - don't care about return value
 			$this->get_defensio_xml( 'postDocument', 'announcing post', array( $params ) );
 		}
 	}
